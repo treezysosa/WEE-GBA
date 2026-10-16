@@ -10,6 +10,8 @@ function Invoke-Checked([string]$Program, [string[]]$Arguments) {
     & $Program @Arguments
     if ($LASTEXITCODE -ne 0) { throw "$Program failed with exit code $LASTEXITCODE" }
 }
+Invoke-Checked 'python' @((Join-Path $Root 'scripts/generate-demo.py'))
+Invoke-Checked 'python' @((Join-Path $Root 'scripts/verify-content.py'))
 $Configure = @('-S', $Root, '-B', $Build, '-G', 'Visual Studio 17 2022', '-A', 'x64', '-DBUILD_TESTING=ON')
 if ($JucePath) { $Configure += "-DWEE_JUCE_PATH=$JucePath" }
 Invoke-Checked 'cmake' $Configure

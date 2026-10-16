@@ -11,6 +11,10 @@ jobs:
     timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
+      - name: Generate original demo audio
+        run: python scripts/generate-demo.py
+      - name: Verify demo provenance and hashes
+        run: python scripts/verify-content.py
       - name: Configure x64
         run: cmake -S . -B build/windows -G "Visual Studio 17 2022" -A x64 -DBUILD_TESTING=ON
       - name: Build Release

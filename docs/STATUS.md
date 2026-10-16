@@ -1,30 +1,38 @@
 # Implementation and verification
 
-## Phase 1 implemented in source
+## Phase 1
 
-- VST3 and standalone JUCE targets, C++20, CMake, PowerShell x64 workflow.
-- 32-voice oscillator instrument, velocity, ADSR, polyBLEP saw/pulse, sine, one-pole low-pass, sustain, pitch bend, oldest-voice stealing and panic.
-- Seven automatable parameters; schema-1 binary host state and XML patch save/load, temporary-file replacement for patch saves, async file dialogs, safe editor callback lifetime.
-- Original resizable handheld UI, working patch load/save and init/panic buttons, oscillator selection, knobs, keyboard, BPM/voice/CPU/peak readouts.
-- Three original synthesis presets; empty sample provenance manifest explicitly disclosing no sample content.
+Windows x64 VST3 and standalone builds succeeded in GitHub Actions run 38850425598. The DSP and preset-state CTest suites both passed. Actual GUI operation, audio-device output, FL Studio playback and plugin validation were not performed by that run.
 
-## Verification actually performed
+## Phase 2 implementation
 
-GCC 14.2 C++20 Linux build and execution of portable DSP tests: passed. Covers 3 sample rates × 5 buffer sizes × 3 oscillator shapes, finite bounded stereo output, idle silence, sustained notes, release completion, 32-voice cap/stealing, panic and A4/pitch-bend frequency. AddressSanitizer/UndefinedBehaviorSanitizer also passed with leak detection disabled (LeakSanitizer cannot run under this environment’s ptrace supervision). No physical audio listening or audio-device playback occurred.
+- Fixed 32-voice stereo sampler: linear interpolation, MIDI root/key-range mapping, velocity, ADSR, sustain, ±2-semitone bend, oldest-voice stealing and panic.
+- Sample start/end, looping of the trimmed region, one-shot boundary fades, tone filtering, source selection and mono output fold-down.
+- Dedicated background WAV/AIFF/FLAC decoder with size/duration limits, nonfinite-data sanitization, waveform preview and readable loading/missing/corrupt-file errors.
+- Fixed-size pointer exchange: audio swaps prepared assets at block boundaries, kills old sample voices and retires the old buffer; worker performs all asset destruction. Pending replacements are coalesced; no shared_ptr destruction or locking in the audio handoff.
+- Native sample file browser, drag/drop audio or presets, onscreen-key audition, visible mapping/trim controls, clear/relocate and functional source switching. No decorative inactive tabs are exposed.
+- Schema-2 host state and presets, schema-1 migration, relative/fallback absolute sample paths, manual missing-file recovery and temporary-file saves.
+- Two original CC0 synthesized stereo demos with reproducible generation and a provenance manifest, alongside three original synthesis presets.
 
-JUCE compilation and serialization tests remain unrun: CMake/JUCE/Linux audio/GUI development dependencies were unavailable and the configured proxy connection failed. Windows/MSVC, FL Studio, other DAWs, standalone device setup, ASIO, GUI accessibility/scaling and plugin validation are unverified. Do not interpret the portable test result as plugin certification.
+## Verification
 
-## Real-time design and known limits
+Phase 2 portable sampler tests pass under GCC 14.2 and AddressSanitizer/UndefinedBehaviorSanitizer (leak detection disabled because this environment runs under ptrace). They cover 3 rates × 5 buffers, stereo independence, pitch/root/octave, looping, release/sustain, key ranges, trim, silence on missing asset, voice limits, 20,000 concurrent publications and audio-thread allocation/asset-destruction guards. Phase 1 DSP tests still pass. Content generation and provenance verification pass locally.
 
-DSP voice storage is fixed, with no DSP-thread disk access or dynamic voice allocation. GUI keys use a bounded SPSC queue; overflow requests panic. UI polls atomic telemetry. Short host MIDI messages are read in place to avoid allocating for SysEx. The processor clears consumed MIDI and supports mono/stereo output. Host parameter replacement follows JUCE APVTS behavior; host tempo/parameter APIs and the JUCE wrapper still need a profiler/allocation audit before a hard real-time guarantee. GUI keyboard producers must remain on the message thread. This is not MPE; pitch bend and sustain are global across channels. Same-pitch note-off releases all matching held voices.
+The Windows CI run for Phase 2 is the remaining verification gate at the time of writing. It compiles VST3, standalone and tests and adds integration checks for asynchronous decode, sample state recall, schema migration, moved-folder recovery, missing/corrupt files, rapid replacement and mono AIFF/FLAC playback. Consult the Actions result for this commit. FL Studio/other DAWs, human listening, standalone device configuration, ASIO and GUI interaction remain unverified even after CI passes.
 
-Filter cutoff and ADSR automation are block-rate and not smoothed; abrupt edits and voice stealing can click. Output tanh bounds peaks but is not a mastering limiter; nonlinear harmonics can alias. No oversampling or SIMD optimization has been profiled. The UI uses standard JUCE typography, not a bundled pixel font, and no animated waveform or D-pad is exposed. Preset file errors are reported; process crashes during file replacement are not yet fault-injection tested. Version 1 is the only supported schema; future migrations are not implemented.
+## Real-time behavior and limits
 
-## Next practical milestones
+No sampler disk I/O, allocation, blocking locks or asset deletion occur in processBlock. Decoder requests/status and preset I/O use non-audio threads. A two-slot atomic pointer exchange bounds audio-side work; a loaded sample is immutable. GUI keys use a bounded SPSC queue; overflow requests panic. Short MIDI messages are read in-place. The JUCE wrapper/APVTS/host APIs still need whole-plugin profiling before a strict hard-real-time guarantee. Tests guard the portable engine and exchange, not every host/wrapper call.
 
-1. Obtain JUCE 8.0.6 and CMake, run the complete Debug/Release builds and state tests on Windows. Fix any integration errors; run pluginval and the FL Studio checklist in README before distributing binaries.
-2. Phase 2: introduce immutable prepared stereo sample assets, a background loader and bounded handoff with deferred reclamation; then key/velocity zones, start/end/loops, multisample presets and missing-file recovery. Add legal synthetic demo audio or licensed recordings with full provenance. Verify repeated loads under sustained MIDI and offline bounce without callback allocations.
-3. Phase 3: extend layer/voice architecture, wavetable, modulation and filters; add FM/granular only with working tests and exposed controls.
-4. Phases 4–7: vocal DSP, deterministic generator/export, effects, full library/navigation, profiling, installers and release validation.
+A sample is fully resident in RAM, not disk-streamed; one asset is mapped across one key range per patch. Simultaneous current/pending/retired/decoding buffers can temporarily use several times the per-asset limit. Old voices stop on content change. Playback or an offline bounce should begin only after loading completes; MIDI notes during loading are discarded. Files are not embedded in host projects; collect them with your project. Controls for root, key range, trim and loop apply at note-on. Invalid trim/key ranges are silent. Channels share global bend/sustain; no MPE. Same-pitch note-off releases all matching held voices.
 
-All sampling, vocals, time stretching, formant processing, granular/FM/additive engines, eight-layer patches, generation, MIDI/audio export, modulation matrix, MIDI learn, aftertouch/expression routing, effects rack, undo/redo, A/B, favorites, library indexing, sample drag/drop, installers and commercial sample collection remain unfinished. No controls claim to implement them.
+Loop boundaries have no automatic crossfade; choose matching edges. Asset switching, stealing, envelope edits and block-rate filter edits can click. Large sample pitch shifts can alias; no formant preservation or time stretching. Output soft clipping is not a mastering limiter. No streaming/SIMD/oversampling optimization is claimed. GUI is resizable and uses standard readable JUCE fonts; it has no complete seven-page product navigation yet.
+
+## Next milestones
+
+1. Verify the Phase 2 Windows build/tests, then run the documented FL Studio and pluginval checks with imported stereo and long samples. Test sample relocation, rapid replacement while holding notes, save/reopen, offline bounce, multiple instances and buffers 32–1024.
+2. Extend sampling to multiple key/velocity zones, round robin, release samples, crossfade loops and persistent user-library indexing; profile memory/loading before expanding the library.
+3. Phase 3: wavetable, multilayer architecture, filter/LFO/modulation matrix, FM and granular foundations with DSP tests.
+4. Later: vocal slicing/pitch/formant/time stretching, deterministic generation/export, complete effects/UI, profiling, signed installers and release validation.
+
+Multisample mapping, reverse, time stretching, vocal processing, eight layers, generator/export, modulation matrix, MIDI learn, expression/aftertouch routing, full effects, undo/redo, A/B, favorites/search, installers and the large commercial sample collection remain unfinished.
