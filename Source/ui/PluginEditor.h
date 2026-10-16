@@ -52,6 +52,8 @@ private:
     VocalWaveform sliceWave;
     juce::ComboBox sliceChoice;
     juce::Slider sliceStart,sliceEnd;
+    juce::Label startCaption,endCaption;
+    int displayedBase=-1;
     juce::TextButton useVocal {"USE VOCAL LAYER"},detect {"DETECT"},split {"SPLIT"},remove {"REMOVE"},preview {"PREVIEW"},stop {"STOP"},exportClip {"EXPORT CLIP"},exportChop {"EXPORT CHOP"};
     bool updatingSlices=false,draggingBoundary=false;
     std::vector<float> waveform;

@@ -75,7 +75,7 @@ WeeEditor::WeeEditor(WeeProcessor& p) : AudioProcessorEditor(p),processor(p),key
     for(auto* label:{&status,&sampleInfo,&hint}){addAndMakeVisible(label);label->setJustificationType(juce::Justification::centred);}
     hint.setText("Enable layers 1–8 above. Edit one layer at a time; all sample/grain layers share the loaded recording.",juce::dontSendNotification);
     for(auto* b:{&useVocal,&detect,&split,&remove,&preview,&stop,&exportClip,&exportChop})addAndMakeVisible(b);
-    addAndMakeVisible(sliceWave);addAndMakeVisible(sliceChoice);addAndMakeVisible(sliceStart);addAndMakeVisible(sliceEnd);
+    addAndMakeVisible(sliceWave);addAndMakeVisible(sliceChoice);addAndMakeVisible(sliceStart);addAndMakeVisible(sliceEnd);addAndMakeVisible(startCaption);addAndMakeVisible(endCaption);startCaption.setText("START",juce::dontSendNotification);endCaption.setText("END",juce::dontSendNotification);
     useVocal.onClick=[this]{processor.activateVocalLayer(selectedLayer);};detect.onClick=[this]{processor.detectChops();};
     split.onClick=[this]{sliceWave.split();};remove.onClick=[this]{sliceWave.remove();};
     preview.onClick=[this]{processor.previewSlice(sliceWave.selected,selectedLayer);};stop.onClick=[this]{processor.stopPreview();processor.stopSequencer();};
@@ -105,7 +105,7 @@ void WeeEditor::rebuildPage() {
         }
     }
     if(page==5){for(const auto& spec:wee::vocalSpecs){auto c=std::make_unique<WeeParameterControl>(processor,spec);panel.addAndMakeVisible(*c);controls.push_back(std::move(c));}}
-    for(auto* c:{static_cast<juce::Component*>(&sliceWave),static_cast<juce::Component*>(&sliceChoice),static_cast<juce::Component*>(&sliceStart),static_cast<juce::Component*>(&sliceEnd),static_cast<juce::Component*>(&useVocal),static_cast<juce::Component*>(&detect),static_cast<juce::Component*>(&split),static_cast<juce::Component*>(&remove),static_cast<juce::Component*>(&preview),static_cast<juce::Component*>(&stop),static_cast<juce::Component*>(&exportClip),static_cast<juce::Component*>(&exportChop)})c->setVisible(page==5);
+    for(auto* c:{static_cast<juce::Component*>(&sliceWave),static_cast<juce::Component*>(&sliceChoice),static_cast<juce::Component*>(&sliceStart),static_cast<juce::Component*>(&sliceEnd),static_cast<juce::Component*>(&startCaption),static_cast<juce::Component*>(&endCaption),static_cast<juce::Component*>(&useVocal),static_cast<juce::Component*>(&detect),static_cast<juce::Component*>(&split),static_cast<juce::Component*>(&remove),static_cast<juce::Component*>(&preview),static_cast<juce::Component*>(&stop),static_cast<juce::Component*>(&exportClip),static_cast<juce::Component*>(&exportChop)})c->setVisible(page==5);
     hint.setText(page==5?"Double-click waveform to split; drag a line; right-click/Delete to remove. Formants rebuild in background.":"Enable layers 1–8 above. All sample/grain/vocal layers share the recording.",juce::dontSendNotification);
     viewport.setViewPosition(0,0);resized();for(auto& c:controls)c->refresh();
 }
@@ -140,7 +140,7 @@ void WeeEditor::resized() {
     for(size_t i=0;i<wee::layerCount;++i)place(layerButtons[i],566+int(i)*40,144,40,28);
     place(sampleInfo,110,178,780,28);place(viewport,110,page==5?384:270,780,page==5?242:356);
     place(sliceWave,110,210,780,90);place(useVocal,110,306,150,26);place(detect,266,306,75,26);place(split,347,306,65,26);place(remove,418,306,80,26);place(preview,504,306,85,26);place(stop,595,306,65,26);place(exportClip,666,306,105,26);place(exportChop,777,306,113,26);
-    place(sliceChoice,110,342,240,30);place(sliceStart,362,342,250,30);place(sliceEnd,624,342,266,30);
+    place(sliceChoice,110,342,240,30);place(startCaption,355,342,58,30);place(sliceStart,413,342,199,30);place(endCaption,619,342,42,30);place(sliceEnd,661,342,229,30);
     place(hint,110,630,780,32);place(keys,110,666,780,64);
     place(home,8,340,80,40);place(panic,912,340,80,40);place(previous,8,390,80,32);place(next,912,390,80,32);arrangeControls();
 }
@@ -148,6 +148,9 @@ void WeeEditor::timerCallback() {
     status.setText("BPM " + juce::String(processor.bpm.load(),1)+"   VOICES "+juce::String(processor.voiceCount.load())+"   L"+juce::String(int(selectedLayer+1))+" "+juce::String(processor.layerVoices[selectedLayer].load())+"   CPU "+juce::String(processor.cpu.load(),1)+"%   PEAK "+juce::String(juce::Decibels::gainToDecibels(processor.peak.load(),-100.0f),1)+" dB",juce::dontSendNotification);
     const auto info=processor.sampleStatus()+(page==5 && processor.exportStatus().isNotEmpty()?" | "+processor.exportStatus():juce::String());sampleInfo.setText(info,juce::dontSendNotification);sampleInfo.setTooltip(info);
     if(revision!=processor.sampleRevision()){revision=processor.sampleRevision();waveform=processor.sampleWaveform();sliceWave.peaks=waveform;sliceWave.markers=processor.sliceMarkers();sliceWave.selected=std::min(sliceWave.selected,sliceWave.markers.count-1);updateSliceSelection();}
+    const auto vocal=processor.vocalSettings();if(displayedBase!=int(vocal.v[wee::VBase]))updateSliceSelection();
+    const bool vocalLayer=processor.state.getRawParameterValue(WeeProcessor::parameterId(selectedLayer,wee::Source))->load()>=.5f && processor.state.getRawParameterValue(WeeProcessor::parameterId(selectedLayer,wee::VocalMode))->load()>=.5f;
+    useVocal.setButtonText(vocalLayer?"VOCAL LAYER ACTIVE":"USE VOCAL LAYER");
     const bool ready=!processor.sampleLoading() && !waveform.empty();sliceWave.setEnabled(ready);detect.setEnabled(ready);split.setEnabled(ready && sliceWave.markers.count<wee::maxSlices);remove.setEnabled(ready && sliceWave.markers.count>1);preview.setEnabled(ready);exportClip.setEnabled(ready && !processor.exporting());exportChop.setEnabled(ready && !processor.exporting());
     sliceStart.setEnabled(ready && sliceWave.selected>0);sliceEnd.setEnabled(ready && sliceWave.selected<sliceWave.markers.count-1);
     for(auto& c:controls)c->refresh();repaint();
@@ -179,8 +182,8 @@ void WeeEditor::filesDropped(const juce::StringArray& files,int,int){
 }
 
 void WeeEditor::updateSliceSelection(){
-    updatingSlices=true;sliceChoice.clear(juce::dontSendNotification);
-    for(int i=0;i<sliceWave.markers.count;++i)sliceChoice.addItem("Chop "+juce::String(i+1)+" / MIDI "+juce::String(int(processor.vocalSettings().v[wee::VBase])+i),i+1);
+    updatingSlices=true;displayedBase=int(processor.vocalSettings().v[wee::VBase]);sliceChoice.clear(juce::dontSendNotification);
+    for(int i=0;i<sliceWave.markers.count;++i)sliceChoice.addItem("Chop "+juce::String(i+1)+" / MIDI "+juce::String(displayedBase+i),i+1);
     sliceWave.selected=juce::jlimit(0,sliceWave.markers.count-1,sliceWave.selected);sliceChoice.setSelectedId(sliceWave.selected+1,juce::dontSendNotification);
     sliceStart.setValue(sliceWave.markers.points[size_t(sliceWave.selected)],juce::dontSendNotification);sliceEnd.setValue(sliceWave.markers.points[size_t(sliceWave.selected+1)],juce::dontSendNotification);updatingSlices=false;sliceWave.repaint();
 }

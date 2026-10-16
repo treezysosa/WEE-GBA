@@ -68,6 +68,11 @@ int main(){
         check(sequence.begin(config,128,48000,120,true,true,true,1,4),"transport seek clears sequence lane");
     }
     config={};config.v[wee::VSync]=1;config.v[wee::VSourceBpm]=120;check(config.stretch(60)==2 && config.stretch(240)==.5,"host tempo stretch ratio");
+    // A vocal-only asset rebuild must not cut ordinary sample voices.
+    {auto rack=std::make_unique<wee::LayerRack>();rack->prepare(48000);auto original=sample;original.sourceGeneration=42;auto processed=original;processed.generation=2;
+        std::array<wee::LayerConfig,wee::layerCount> layers;for(size_t i=0;i<layers.size();++i)layers[i]=wee::LayerConfig(i);layers[0].v[wee::Source]=1;layers[0].v[wee::Loop]=1;
+        rack->setSample(&original);rack->configure(layers,1,120);rack->noteOn(60,1);check(rack->activeVoices()==1,"ordinary sample voice started");
+        audio=true;rack->setSample(&processed);audio=false;check(rack->activeVoices()==1,"vocal rebuild preserves ordinary sample voice");}
     check(allocations==0,"no vocal playback/sequence allocations");
     std::cout<<"Vocal tests passed: onsets/editing, pitch/stretch, stereo/reverse, mapping/lanes, formants, cancellation, tempo and sample-exact sequencing.\n";
 }
