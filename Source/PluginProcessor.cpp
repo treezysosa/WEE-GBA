@@ -23,7 +23,7 @@ bool readSlices(const juce::ValueTree& tree,wee::SliceDocument& document) {
 bool migrateAndValidate(juce::ValueTree& tree) {
     if(!tree.hasType("WEE"))return false;
     const int schema=int(tree.getProperty("schema",0));
-    const int expected=schema==1?7:(schema==2?14:(schema==3?361:(schema==4?int(wee::layerCount*wee::paramCount+wee::vocalParamCount+2):-1)));
+    const int expected=schema==1?7:(schema==2?14:(schema==3?361:(schema==4?401:(schema==5?402:-1))));
     if(expected<0 || tree.getNumChildren()!=expected)return false;
     auto result=tree.createCopy();result.removeAllChildren(nullptr);size_t seen=0;
     auto parameter=[&](const juce::String& id,const wee::ParamSpec& spec,float initial,bool required,float& out){
@@ -32,18 +32,21 @@ bool migrateAndValidate(juce::ValueTree& tree) {
     };
     for(size_t layer=0;layer<wee::layerCount;++layer){
         const wee::LayerConfig defaults(layer);std::array<float,wee::paramCount> v {};
-        for(size_t p=0;p<wee::paramCount;++p){const bool required=schema==4 || (schema==3 && p<45) || (schema<3 && layer==0 && int(p)<expected);if(!parameter(WeeProcessor::parameterId(layer,p),wee::specs[p],defaults.v[p],required,v[p]))return false;}
+        for(size_t p=0;p<wee::paramCount;++p){const bool required=schema>=4 || (schema==3 && p<45) || (schema<3 && layer==0 && int(p)<expected);if(!parameter(WeeProcessor::parameterId(layer,p),wee::specs[p],defaults.v[p],required,v[p]))return false;}
         if(v[wee::Start]>=v[wee::End] || v[wee::Low]>v[wee::High])return false;
     }
     const wee::ParamSpec master{"masterGain","Master",0,1,1,wee::ParamType::continuous};float unused=0;
     if(!parameter("masterGain",master,1,schema>=3,unused))return false;
-    for(const auto& spec:wee::vocalSpecs)if(!parameter(spec.id,spec,spec.initial,schema==4,unused))return false;
+    for(const auto& spec:wee::vocalSpecs)if(!parameter(spec.id,spec,spec.initial,schema>=4,unused))return false;
     wee::SliceDocument document;
-    if(schema==4){int found=0;for(const auto& child:tree)if(child.hasType("SLICES")){if(!readSlices(child,document))return false;++found;}if(found!=1)return false;++seen;}
+    if(schema>=4){int found=0;for(const auto& child:tree)if(child.hasType("SLICES")){if(!readSlices(child,document))return false;++found;}if(found!=1)return false;++seen;}
+    wee::GeneratorDocument generated;
+    if(schema==5){int found=0;for(const auto& child:tree)if(child.hasType("GENERATOR")){if(!wee::readGenerator(child,generated))return false;++found;}if(found!=1)return false;++seen;}
+    result.appendChild(wee::generatorTree(generated),nullptr);
     if(seen!=size_t(expected))return false;result.appendChild(sliceTree(document),nullptr);
     if(result.getProperty("samplePath").toString().length()>4096 || result.getProperty("sampleRelative").toString().length()>4096)return false;
     if(schema==1){result.removeProperty("samplePath",nullptr);result.removeProperty("sampleRelative",nullptr);}
-    result.setProperty("schema",4,nullptr);tree=result;return true;
+    result.setProperty("schema",5,nullptr);tree=result;return true;
 }
 }
 juce::AudioProcessorValueTreeState::ParameterLayout WeeProcessor::layout() {
@@ -83,6 +86,8 @@ WeeProcessor::WeeProcessor() : AudioProcessor(BusesProperties().withOutput("Outp
     masterGain=state.getRawParameterValue("masterGain");
     for(size_t p=0;p<wee::vocalParamCount;++p)vocalValues[p]=state.getRawParameterValue(wee::vocalSpecs[p].id);
     state.state.appendChild(sliceTree({}),nullptr);
+    state.state.appendChild(wee::generatorTree({}),nullptr);
+    publishGenerator({});
     for(const auto* id:{"vocalFormant","vocalPreserve","vocalPitch"})state.addParameterListener(id,this);
 }
 bool WeeProcessor::isBusesLayoutSupported(const BusesLayout& b) const {
@@ -91,19 +96,24 @@ bool WeeProcessor::isBusesLayoutSupported(const BusesLayout& b) const {
 WeeProcessor::~WeeProcessor(){for(const auto* id:{"vocalFormant","vocalPreserve","vocalPitch"})state.removeParameterListener(id,this);keyboard.removeListener(this);}
 wee::VocalConfig WeeProcessor::vocalSettings()const noexcept{wee::VocalConfig c;for(size_t p=0;p<wee::vocalParamCount;++p)c.v[p]=vocalValues[p]->load();return c;}
 void WeeProcessor::parameterChanged(const juce::String&,float){const float shift=vocalValues[wee::VFormant]->load()-(vocalValues[wee::VPreserve]->load()>=.5f?vocalValues[wee::VPitch]->load():0);loader.setFormantShift(shift);}
-void WeeProcessor::prepareToPlay(double sr, int) { rate = sr; rack.prepare(sr);sequencer.reset(); }
+void WeeProcessor::prepareToPlay(double sr, int) { rate = sr; rack.prepare(sr);generatedRack.prepare(sr);sequencer.reset();patternPlayer.reset(); }
 void WeeProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi) {
     juce::ScopedNoDenormals noDenormals;
     const auto start = juce::Time::getHighResolutionTicks();
     buffer.clear();
-    if (loader.exchange.adopt()) rack.setSample(loader.exchange.current());
+    if (loader.exchange.adopt()){rack.setSample(loader.exchange.current());generatedRack.setSample(loader.exchange.current());}
+    if(generatedExchange.adopt()){generatedRack.allNotesOff(true);patternPlayer.reset();}
     bool hostAvailable=false,playing=false,hasPpq=false;double ppq=0;
-    if(auto* host=getPlayHead()){hostAvailable=true;if(auto position=host->getPosition()){playing=position->getIsPlaying();if(auto tempo=position->getBpm())bpm.store(*tempo);if(auto beat=position->getPpqPosition()){ppq=*beat;hasPpq=true;}}}
+    if(auto* host=getPlayHead()){hostAvailable=true;if(auto position=host->getPosition()){playing=position->getIsPlaying();if(auto tempo=position->getBpm())if(std::isfinite(*tempo))bpm.store(std::clamp(*tempo,20.0,400.0));if(auto beat=position->getPpqPosition())if(std::isfinite(*beat) && std::abs(*beat)<1e8){ppq=*beat;hasPpq=true;}}}
     std::array<wee::LayerConfig, wee::layerCount> configs;
     for(size_t layer=0;layer<wee::layerCount;++layer) for(size_t p=0;p<wee::paramCount;++p) configs[layer].v[p]=values[layer][p]->load();
     rack.configure(configs,masterGain->load(),bpm.load());
     const auto vocal=vocalSettings();rack.configureVocal(vocal);
-    if(panicRequested.exchange(false)){rack.allNotesOff(true);sequencer.reset();}
+    if(panicRequested.exchange(false)){rack.allNotesOff(true);generatedRack.allNotesOff(true);sequencer.reset();patternPlayer.reset();}
+    const auto* generated=generatedExchange.current();
+    const double generatedTempo=generated && !generated->settings.hostSync?generated->settings.tempo:bpm.load();
+    generatedRack.configure(configs,masterGain->load(),generatedTempo);generatedRack.configureVocal(vocal);
+    if(patternPlayer.begin(generated?&generated->pattern:nullptr,generatorPlaying.load(),buffer.getNumSamples(),rate,generatedTempo,hostAvailable && generated && generated->settings.hostSync,playing,hasPpq,ppq))generatedRack.allNotesOff(true);
     const auto* current=loader.exchange.current();
     const bool sampleReady=!loader.sourceLoading.load() && current && current->valid();
     const bool vocalReady=!loader.busy() && current && current->generation==loader.completed.load();
@@ -143,14 +153,19 @@ void WeeProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuff
         else if (kind == 0xb0 && d1 == 123) rack.allNotesOff();
     }
     render(cursor, buffer.getNumSamples()); midi.clear();
+    patternPlayer.until(buffer.getNumSamples(),[&](int from,int end){generatedRack.render(buffer.getWritePointer(0,from),buffer.getNumChannels()>1?buffer.getWritePointer(1,from):nullptr,end-from);},[&](const wee::PatternEvent& e){
+        if(generated && generated->pattern.mode==3){if(e.on)generatedRack.sequenceSlice(e.note,e.velocity/127.0f,e.degree,vocalReady);else generatedRack.sequenceOff(e.note);}
+        else if(e.on)generatedRack.noteOn(e.note,e.velocity/127.0f,sampleReady,vocalReady);else generatedRack.noteOff(e.note);
+    });
+    for(int channel=0;channel<buffer.getNumChannels();++channel)for(int i=0;i<buffer.getNumSamples();++i)buffer.setSample(channel,i,std::clamp(buffer.getSample(channel,i),-1.0f,1.0f));
     peak.store(buffer.getNumSamples() ? buffer.getMagnitude(0, buffer.getNumSamples()) : 0);
-    voiceCount.store(rack.activeVoices());
-    for(size_t layer=0;layer<wee::layerCount;++layer) layerVoices[layer].store(rack.activeVoices(layer));
+    voiceCount.store(rack.activeVoices()+generatedRack.activeVoices());
+    for(size_t layer=0;layer<wee::layerCount;++layer) layerVoices[layer].store(rack.activeVoices(layer)+generatedRack.activeVoices(layer));
     if (buffer.getNumSamples()) cpu.store(float(juce::Time::highResolutionTicksToSeconds(juce::Time::getHighResolutionTicks() - start) * rate / buffer.getNumSamples() * 100));
 }
 juce::ValueTree WeeProcessor::patchState() {
     const juce::ScopedLock lock(contentStateMutex);
-    auto tree = state.copyState(); tree.setProperty("schema",4,nullptr);
+    auto tree = state.copyState(); tree.setProperty("schema",5,nullptr);
     wee::SliceDocument doc;if(readSlices(tree.getChildWithName("SLICES"),doc) && !doc.manual){doc.map=loader.slices();tree.removeChild(tree.getChildWithName("SLICES"),nullptr);tree.appendChild(sliceTree(doc),nullptr);}return tree;
 }
 void WeeProcessor::getStateInformation(juce::MemoryBlock& dest) {
@@ -170,7 +185,8 @@ bool WeeProcessor::applyPatch(juce::ValueTree tree, const juce::File& base) {
     if (path.isNotEmpty() && !juce::File::isAbsolutePath(path)) return false;
     tree.setProperty("samplePath", path, nullptr); tree.removeProperty("sampleRelative", nullptr);
     wee::SliceDocument document;if(!readSlices(tree.getChildWithName("SLICES"),document))return false;
-    state.replaceState(tree);panic();loader.request(path,document,vocalValues[wee::VSensitivity]->load());return true;
+    wee::GeneratorDocument generated;if(!wee::readGenerator(tree.getChildWithName("GENERATOR"),generated))return false;
+    state.replaceState(tree);generatorPlaying.store(false);publishGenerator(generated);panic();loader.request(path,document,vocalValues[wee::VSensitivity]->load());return true;
 }
 void WeeProcessor::setStateInformation(const void* data, int size) {
     if (auto xml = getXmlFromBinary(data, size)) applyPatch(juce::ValueTree::fromXml(*xml));
@@ -220,3 +236,37 @@ void WeeProcessor::stopSequencer(){auto* p=state.getParameter("chopSequence");p-
 bool WeeProcessor::setSliceMarkers(const wee::SliceMap& map){if(!map.valid())return false;const juce::ScopedLock lock(contentStateMutex);wee::SliceDocument document{map,true};state.state.removeChild(state.state.getChildWithName("SLICES"),nullptr);state.state.appendChild(sliceTree(document),nullptr);loader.request(state.state.getProperty("samplePath").toString(),document,vocalValues[wee::VSensitivity]->load(),false);return true;}
 void WeeProcessor::detectChops(){const juce::ScopedLock lock(contentStateMutex);state.state.removeChild(state.state.getChildWithName("SLICES"),nullptr);state.state.appendChild(sliceTree({}),nullptr);loader.request(state.state.getProperty("samplePath").toString(),{},vocalValues[wee::VSensitivity]->load(),false);}
 void WeeProcessor::exportVocal(const juce::File& file,int slice){loader.exportAudio(file,vocalSettings(),bpm.load(),slice);}
+
+wee::GeneratorDocument WeeProcessor::generatorDocument() const {
+    const juce::ScopedLock lock(contentStateMutex);wee::GeneratorDocument doc;wee::readGenerator(state.state.getChildWithName("GENERATOR"),doc);return doc;
+}
+void WeeProcessor::publishGenerator(const wee::GeneratorDocument& doc){
+    // All producers serialize through contentStateMutex; audio only adopts pointers.
+    generatedExchange.publish(std::make_unique<wee::GeneratorDocument>(doc));generationRevision.fetch_add(1);
+}
+bool WeeProcessor::setGeneratorSettings(const wee::GeneratorSettings& settings){
+    if(!settings.valid())return false;const juce::ScopedLock lock(contentStateMutex);auto doc=generatorDocument();doc.settings=settings;
+    state.state.removeChild(state.state.getChildWithName("GENERATOR"),nullptr);state.state.appendChild(wee::generatorTree(doc),nullptr);publishGenerator(doc);return true;
+}
+bool WeeProcessor::generateLoop(int action){
+    const juce::ScopedLock lock(contentStateMutex);auto doc=generatorDocument();if(action<0 || action>2)return false;
+    if(action)doc.settings.seed=(doc.settings.seed+1)&0x7fffffffu;
+    if(action==2){doc.settings=wee::randomSettings(doc.settings);
+        if(!doc.settings.lockSound && doc.settings.mode!=3){
+            wee::PatternRng random{doc.settings.seed^0x6512cba3u};
+            for(size_t l=0;l<wee::layerCount;++l){wee::LayerConfig defaults(l);for(size_t p=0;p<wee::paramCount;++p){auto* param=state.getParameter(parameterId(l,p));param->setValueNotifyingHost(param->convertTo0to1(defaults.v[p]));}}
+            auto put=[&](size_t p,float v){auto* param=state.getParameter(parameterId(0,p));param->setValueNotifyingHost(param->convertTo0to1(v));};
+            put(wee::SynthMode,float(random.pick(3)));put(wee::Waveform,float(random.pick(3)));put(wee::Cutoff,float(1200+random.pick(10000)));put(wee::Attack,.003f+random.pick(20)*.002f);put(wee::Release,.12f+random.pick(20)*.02f);put(wee::WTPosition,random.pick(101)/100.0f);put(wee::FMIndex,random.pick(201)/100.0f);
+        }
+    }
+    const auto slices=loader.slices();auto pattern=wee::generatePattern(doc.settings,&doc.pattern,slices.count,int(vocalValues[wee::VBase]->load()));
+    if(!pattern.valid())return false;doc.pattern=std::move(pattern);
+    state.state.removeChild(state.state.getChildWithName("GENERATOR"),nullptr);state.state.appendChild(wee::generatorTree(doc),nullptr);publishGenerator(doc);return true;
+}
+bool WeeProcessor::exportGenerated(const juce::File& file,bool midi){
+    const juce::ScopedLock lock(contentStateMutex);auto doc=generatorDocument();if(doc.pattern.count==0 || (!midi && loader.busy()))return false;
+    auto job=std::make_unique<wee::LoopExportJob>();job->document=std::move(doc);job->destination=file;job->midi=midi;
+    job->bpm=job->document.settings.hostSync?std::clamp(bpm.load(),20.0,400.0):job->document.settings.tempo;
+    for(size_t l=0;l<wee::layerCount;++l)for(size_t p=0;p<wee::paramCount;++p)job->layers[l].v[p]=values[l][p]->load();
+    job->master=masterGain->load();job->vocal=vocalSettings();job->slices=loader.slices();job->samplePath=state.state.getProperty("samplePath").toString();loopExporter.submit(std::move(job));return true;
+}

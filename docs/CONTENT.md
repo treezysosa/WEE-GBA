@@ -1,3 +1,15 @@
+# Phase 5 generator document
+
+New writes use schema **5**, retaining all 400 schema-4 parameters and the validated SLICES child, plus exactly one GENERATOR child (402 root children total). Schemas 1–4 migrate with an empty, stopped generator. All former parameter IDs and choice ranges remain stable.
+
+GENERATOR version 1 records seed (0–2147483647), style/mode/bars/root/scale/octave, five 0–100 musical controls, manual tempo, lock flags, sync flag, current pattern length/mode, 16 CHORD scale-degree children, then up to 1024 sorted NOTE children. Notes store finite onset/duration in quarter-note beats, MIDI pitch/velocity and scale degree (slice index for chop mode). Duration must be positive and remain within the pattern. Known versions, complete settings, allowed lengths/ranges and child order are validated before replacing state. Derived sorted on/off events are prepared off the audio callback. Playback armed state is deliberately not persisted.
+
+Settings and saved notes are independent: editing controls does not silently regenerate musical material. Reproducibility depends on settings, seed, previous notes under active locks, available slices and captured base key. Randomized sound parameters are saved normally in the patch. Factory Pocket Signal and Moon Circuit contain original, reproducibly generated notes and MIT parameter settings; no new audio recordings were added in Phase 5.
+
+The SMF exporter uses format 0/960 PPQ, tempo and 4/4 meta events, complete note pairs, and an exact bar-end end-of-track. Offline WAV jobs capture notes, current patch and sample reference and render at 48 kHz. Audio stays external. Export is not licensing authorization for imported source content.
+
+## Earlier content formats
+
 # Presets and sample content
 
 ## Schema 4 vocal document

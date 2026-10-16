@@ -1,6 +1,7 @@
 #pragma once
 #include "PluginProcessor.h"
 #include "VocalWaveform.h"
+#include "GeneratorPanel.h"
 class WeeParameterControl final : public juce::Component {
 public:
     WeeParameterControl(WeeProcessor&,size_t layer,size_t parameter,const juce::String& name = {});
@@ -41,6 +42,7 @@ private:
     juce::MidiKeyboardComponent keys;
     juce::Viewport viewport;
     juce::Component panel;
+    GeneratorPanel generatorPanel;
     std::vector<std::unique_ptr<WeeParameterControl>> controls;
     juce::ComboBox layerChoice,pageChoice;
     std::array<juce::ToggleButton,wee::layerCount> layerButtons;

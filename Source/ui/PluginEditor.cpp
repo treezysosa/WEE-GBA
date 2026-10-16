@@ -47,7 +47,7 @@ void WeeParameterControl::refresh() {
     }
     setEnabled(enabled);
 }
-WeeEditor::WeeEditor(WeeProcessor& p) : AudioProcessorEditor(p),processor(p),keys(p.keyboard,juce::MidiKeyboardComponent::horizontalKeyboard) {
+WeeEditor::WeeEditor(WeeProcessor& p) : AudioProcessorEditor(p),processor(p),keys(p.keyboard,juce::MidiKeyboardComponent::horizontalKeyboard),generatorPanel(p) {
     theme.setColour(juce::Slider::trackColourId,juce::Colour(0xff9bdcad));
     theme.setColour(juce::Slider::thumbColourId,juce::Colour(0xffe2ddf2));
     theme.setColour(juce::TextButton::buttonColourId,juce::Colour(0xff423657));
@@ -56,8 +56,8 @@ WeeEditor::WeeEditor(WeeProcessor& p) : AudioProcessorEditor(p),processor(p),key
     for(auto* b:{&load,&save,&panic,&home,&previous,&next,&sampleLoad,&sampleClear}) addAndMakeVisible(b);
     load.onClick=[this]{choosePreset(false);};save.onClick=[this]{choosePreset(true);};
     sampleLoad.onClick=[this]{chooseSample();};sampleClear.onClick=[this]{processor.clearSample();};
-    panic.onClick=[this]{processor.stopSequencer();processor.stopPreview();processor.panic();};
-    home.onClick=[this]{processor.clearSample();for(auto* p:processor.getParameters()){p->beginChangeGesture();p->setValueNotifyingHost(p->getDefaultValue());p->endChangeGesture();}};
+    panic.onClick=[this]{processor.playGenerated(false);processor.stopSequencer();processor.stopPreview();processor.panic();};
+    home.onClick=[this]{processor.playGenerated(false);processor.setGeneratorSettings({});processor.clearSample();for(auto* p:processor.getParameters()){p->beginChangeGesture();p->setValueNotifyingHost(p->getDefaultValue());p->endChangeGesture();}};
     for(size_t i=0;i<wee::layerCount;++i) {
         layerChoice.addItem("LAYER " + juce::String(int(i+1)),int(i+1));
         auto& button=layerButtons[i];button.setButtonText(juce::String(int(i+1)));button.setName("Enable layer " + juce::String(int(i+1)));addAndMakeVisible(button);
@@ -67,7 +67,7 @@ WeeEditor::WeeEditor(WeeProcessor& p) : AudioProcessorEditor(p),processor(p),key
     layerChoice.onChange=[this]{selectedLayer=size_t(layerChoice.getSelectedId()-1);rebuildPage();};
     previous.onClick=[this]{layerChoice.setSelectedId(int((selectedLayer+7)%8)+1);};
     next.onClick=[this]{layerChoice.setSelectedId(int((selectedLayer+1)%8)+1);};
-    pageChoice.addItemList({"SYNTH","SAMPLE / GRANULAR","MODULATION","LAYER MIXER","VOCAL LAB"},1);
+    pageChoice.addItemList({"SYNTH","SAMPLE / GRANULAR","MODULATION","LAYER MIXER","VOCAL LAB","GENERATE"},1);
     pageChoice.setSelectedId(1,juce::dontSendNotification);pageChoice.setName("Instrument page");addAndMakeVisible(pageChoice);
     pageChoice.onChange=[this]{page=pageChoice.getSelectedId();rebuildPage();};
     addAndMakeVisible(viewport);viewport.setViewedComponent(&panel,false);viewport.setScrollBarsShown(true,false);
@@ -90,7 +90,7 @@ WeeEditor::WeeEditor(WeeProcessor& p) : AudioProcessorEditor(p),processor(p),key
     waveform=p.sampleWaveform();sliceWave.peaks=waveform;sliceWave.markers=p.sliceMarkers();revision=p.sampleRevision();updateSliceSelection();rebuildPage();startTimerHz(15);
 }
 void WeeEditor::rebuildPage() {
-    controls.clear();
+    controls.clear();panel.addChildComponent(generatorPanel);generatorPanel.setVisible(page==6);
     auto add=[&](size_t param){auto c=std::make_unique<WeeParameterControl>(processor,selectedLayer,param);panel.addAndMakeVisible(*c);controls.push_back(std::move(c));};
     if(page==1) for(auto p:{wee::Source,wee::SynthMode,wee::Waveform,wee::Gain,wee::Pan,wee::Transpose,wee::Attack,wee::Decay,wee::Sustain,wee::Release,wee::Cutoff,wee::FilterMode,wee::Resonance,wee::WTPosition,wee::OscMix,wee::Detune,wee::FMRatio,wee::FMIndex}) add(p);
     else if(page==2) for(auto p:{wee::Source,wee::VocalMode,wee::Root,wee::Loop,wee::Start,wee::End,wee::GrainPosition,wee::Low,wee::High,wee::GrainSize,wee::GrainDensity,wee::GrainSpray}) add(p);
@@ -106,7 +106,7 @@ void WeeEditor::rebuildPage() {
     }
     if(page==5){for(const auto& spec:wee::vocalSpecs){auto c=std::make_unique<WeeParameterControl>(processor,spec);panel.addAndMakeVisible(*c);controls.push_back(std::move(c));}}
     for(auto* c:{static_cast<juce::Component*>(&sliceWave),static_cast<juce::Component*>(&sliceChoice),static_cast<juce::Component*>(&sliceStart),static_cast<juce::Component*>(&sliceEnd),static_cast<juce::Component*>(&startCaption),static_cast<juce::Component*>(&endCaption),static_cast<juce::Component*>(&useVocal),static_cast<juce::Component*>(&detect),static_cast<juce::Component*>(&split),static_cast<juce::Component*>(&remove),static_cast<juce::Component*>(&preview),static_cast<juce::Component*>(&stop),static_cast<juce::Component*>(&exportClip),static_cast<juce::Component*>(&exportChop)})c->setVisible(page==5);
-    hint.setText(page==5?"Double-click waveform to split; drag a line; right-click/Delete to remove. Formants rebuild in background.":"Enable layers 1–8 above. All sample/grain/vocal layers share the recording.",juce::dontSendNotification);
+    hint.setText(page==6?"Change settings, then GENERATE. NEXT SEED varies results; PLAY follows host transport when sync is on.":page==5?"Double-click waveform to split; drag a line; right-click/Delete to remove. Formants rebuild in background.":"Enable layers 1–8 above. All sample/grain/vocal layers share the recording.",juce::dontSendNotification);
     viewport.setViewPosition(0,0);resized();for(auto& c:controls)c->refresh();
 }
 void WeeEditor::arrangeControls() {
@@ -119,7 +119,7 @@ void WeeEditor::arrangeControls() {
         if(page==4 && i>=1) {row=1+int((i-1)/2);col=int((i-1)%2);}
         controls[i]->setBounds(col*cell,row*rowHeight,cell-6,rowHeight-4);maxRow=std::max(maxRow,row);
     }
-    panel.setSize(width,(maxRow+1)*rowHeight);
+    if(page==6){generatorPanel.setBounds(0,0,width,650);panel.setSize(width,650);}else panel.setSize(width,(maxRow+1)*rowHeight);
 }
 void WeeEditor::paint(juce::Graphics& g) {
     g.fillAll(juce::Colour(0xff17141e));g.setColour(juce::Colour(0xff66567f));g.fillRoundedRectangle(getLocalBounds().toFloat().reduced(8),58);
@@ -131,7 +131,7 @@ void WeeEditor::paint(juce::Graphics& g) {
     for(size_t i=0;i<waveform.size();++i){float x=display.getX()+float(i)/float(waveform.size())*display.getWidth();float y=std::min(1.0f,waveform[i])*21;g.drawVerticalLine(int(x),display.getCentreY()-y,display.getCentreY()+y);}
     const auto start=processor.state.getRawParameterValue(WeeProcessor::parameterId(selectedLayer,wee::Start))->load(),end=processor.state.getRawParameterValue(WeeProcessor::parameterId(selectedLayer,wee::End))->load();
     g.setColour(juce::Colour(0xffffcf83));g.drawVerticalLine(int(display.getX()+start*display.getWidth()),display.getY(),display.getBottom());g.drawVerticalLine(int(display.getX()+end*display.getWidth()),display.getY(),display.getBottom());
-    g.setFont(12);g.setColour(juce::Colours::white.withAlpha(.7f));g.drawText("PHASE 4   /   VOCAL CHOPS + PITCH / TIME + SPECTRAL FORMANTS",30,765,940,22,juce::Justification::centred);
+    g.setFont(12);g.setColour(juce::Colours::white.withAlpha(.7f));g.drawText("PHASE 5   /   SEEDED MELODIES + CHORDS + MIDI / WAV LOOPS",30,765,940,22,juce::Justification::centred);
 }
 void WeeEditor::resized() {
     auto place=[&](juce::Component& c,int x,int y,int w,int h){c.setBounds(juce::roundToInt(float(x)*float(getWidth())/1000),juce::roundToInt(float(y)*float(getHeight())/800),juce::roundToInt(float(w)*float(getWidth())/1000),juce::roundToInt(float(h)*float(getHeight())/800));};
@@ -146,6 +146,7 @@ void WeeEditor::resized() {
 }
 void WeeEditor::timerCallback() {
     status.setText("BPM " + juce::String(processor.bpm.load(),1)+"   VOICES "+juce::String(processor.voiceCount.load())+"   L"+juce::String(int(selectedLayer+1))+" "+juce::String(processor.layerVoices[selectedLayer].load())+"   CPU "+juce::String(processor.cpu.load(),1)+"%   PEAK "+juce::String(juce::Decibels::gainToDecibels(processor.peak.load(),-100.0f),1)+" dB",juce::dontSendNotification);
+    generatorPanel.refresh();
     const auto info=processor.sampleStatus()+(page==5 && processor.exportStatus().isNotEmpty()?" | "+processor.exportStatus():juce::String());sampleInfo.setText(info,juce::dontSendNotification);sampleInfo.setTooltip(info);
     if(revision!=processor.sampleRevision()){revision=processor.sampleRevision();waveform=processor.sampleWaveform();sliceWave.peaks=waveform;sliceWave.markers=processor.sliceMarkers();sliceWave.selected=std::min(sliceWave.selected,sliceWave.markers.count-1);updateSliceSelection();}
     const auto vocal=processor.vocalSettings();if(displayedBase!=int(vocal.v[wee::VBase]))updateSliceSelection();
