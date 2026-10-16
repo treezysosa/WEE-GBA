@@ -145,6 +145,7 @@ void WeeProcessor::setStateInformation(const void* data, int size) {
 }
 bool WeeProcessor::savePreset(const juce::File& file) {
     auto tree = patchState();
+    if (!migrateAndValidate(tree, state)) return false;
     const auto path = tree.getProperty("samplePath").toString();
     if (path.isNotEmpty()) tree.setProperty("sampleRelative", juce::File(path).getRelativePathFrom(file.getParentDirectory()), nullptr);
     auto xml = tree.createXml(); juce::TemporaryFile temp(file);

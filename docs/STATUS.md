@@ -18,7 +18,7 @@ Windows x64 VST3 and standalone builds succeeded in GitHub Actions run 388504255
 
 Phase 2 portable sampler tests pass under GCC 14.2 and AddressSanitizer/UndefinedBehaviorSanitizer (leak detection disabled because this environment runs under ptrace). They cover 3 rates × 5 buffers, stereo independence, pitch/root/octave, looping, release/sustain, key ranges, trim, silence on missing asset, voice limits, 20,000 concurrent publications and audio-thread allocation/asset-destruction guards. Phase 1 DSP tests still pass. Content generation and provenance verification pass locally.
 
-The Windows CI run for Phase 2 is the remaining verification gate at the time of writing. It compiles VST3, standalone and tests and adds integration checks for asynchronous decode, sample state recall, schema migration, moved-folder recovery, missing/corrupt files, rapid replacement and mono AIFF/FLAC playback. Consult the Actions result for this commit. FL Studio/other DAWs, human listening, standalone device configuration, ASIO and GUI interaction remain unverified even after CI passes.
+Windows CI run 38851631923 compiled the Phase 2 VST3 and standalone and passed all three CTest suites, including integration checks for asynchronous decode, sample state recall, schema migration, moved-folder recovery, missing/corrupt files, rapid replacement and mono AIFF/FLAC playback. The preset-save regression and additional velocity/bend tests were added afterward; consult this commit’s Actions checks for their result. FL Studio/other DAWs, human listening, standalone device configuration, ASIO and GUI interaction remain unverified even after CI passes.
 
 ## Real-time behavior and limits
 

@@ -56,6 +56,9 @@ int main() {
     check(restored.sampleStatus().contains("Cannot read"),"missing file message"); check(play(restored)==0,"missing file silence");
     auto bad=dir.getChildFile("corrupt.wav"); bad.replaceWithText("not a wave file"); restored.loadSample(bad); waitForLoad(restored); check(play(restored)==0,"corrupt file silence");
     restored.loadSample(sample); waitForLoad(restored); check(play(restored)>0.001f,"manual relocation recovers");
+    set(original,"sampleStart",0.9f);
+    check(!original.savePreset(file),"invalid trim cannot overwrite a valid preset");
+    set(original,"sampleStart",0.1f);
     // Reject invalid mappings, unknown schemas, nonfinite values and duplicate IDs.
     check(original.savePreset(file),"create validation fixture");
     const auto xml=juce::XmlDocument::parse(file); check(xml!=nullptr,"parse fixture");

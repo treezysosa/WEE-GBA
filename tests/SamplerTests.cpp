@@ -42,12 +42,29 @@ int main() {
         for(int b=0;b<int(rate/block)+2;++b) { std::fill(l.begin(),l.end(),0.0f); s.render(l.data(),nullptr,block,p); }
         check(s.activeVoices()==0,"one shot terminates");
     }
+    // Velocity changes amplitude, independent of envelope and voice preparation.
+    {
+        wee::SampleSettings settings; settings.loop=true;
+        std::vector<float> loud(4800,0),soft(4800,0);
+        wee::Sampler a,b; a.prepare(48000); b.prepare(48000); a.setSample(&asset); b.setSample(&asset);
+        audioThread=true;
+        a.noteOn(60,1,settings); b.noteOn(60,0.25f,settings);
+        a.render(loud.data(),nullptr,4800,p); b.render(soft.data(),nullptr,4800,p);
+        audioThread=false;
+        check(energy(loud)>energy(soft)*8,"velocity-sensitive playback");
+    }
     // Root note/rate/pitch relationships, including trim shortening and bend.
     for (int note : {60,72}) {
         wee::Sampler s; s.prepare(48000); s.setSample(&asset); wee::SampleSettings settings; settings.loop=true;
         std::vector<float> data(48000,0); s.noteOn(note,1,settings); s.render(data.data(),nullptr,48000,p);
         int count=0; for(size_t i=2401;i<data.size();++i) if(data[i-1]<=0 && data[i]>0) ++count;
         check(std::abs(count-(note==60?380:760))<=1,"sample root/octave pitch");
+    }
+    {
+        wee::Sampler s; s.prepare(48000); s.setSample(&asset); wee::SampleSettings settings; settings.loop=true;
+        std::vector<float> data(48000,0); s.pitchWheel(16383); s.noteOn(60,1,settings); s.render(data.data(),nullptr,48000,p);
+        int count=0; for(size_t i=2401;i<data.size();++i) if(data[i-1]<=0 && data[i]>0) ++count;
+        check(std::abs(count-427)<=1,"sample pitch bend");
     }
     {
         wee::SampleData trim; trim.rate=48000; trim.left.resize(4800,0.8f); trim.right=trim.left;

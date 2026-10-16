@@ -2,7 +2,7 @@
 
 A real C++20/JUCE synthesizer source project targeting Windows x64 VST3 and standalone. Original handheld-console styling; no Nintendo assets, proprietary instrument code, or sampled recordings.
 
-**Status:** Phase 1 VST3/standalone compiled on Windows and passed DSP/state tests. Phase 2 adds sampling; local sampler and lifetime stress tests pass, and the Windows integration build is being verified. FL Studio playback remains unverified. This is an incremental instrument, not the complete flagship specification.
+**Status:** Phase 1 VST3/standalone compiled on Windows and passed DSP/state tests. Phase 2 adds sampling; the Windows x64 VST3/standalone build and all three DSP, sampler and integration test suites passed in GitHub Actions run 38851631923. Consult the latest PR checks for subsequent revisions. FL Studio playback remains unverified. This is an incremental instrument, not the complete flagship specification.
 
 ## Build on Windows
 
@@ -67,7 +67,7 @@ Or configure `cmake -S . -B build/core -DWEE_CORE_ONLY=ON`, build and run CTest.
 
 ## GitHub Actions builds
 
-The Windows VST3 and Standalone workflow runs on pushes, pull requests, or manually from the Actions tab. It builds Release x64, runs DSP, sampler, and preset/state tests, and uploads `WEE-Windows-x64` only after all steps pass. Open a successful run, download that artifact, then extract the inner ZIP. Install the entire `WEE.vst3` folder into the standard VST3 directory; `WEE.exe` is the standalone. The package includes the presets and documentation. Artifacts expire after 14 days. A successful build does not verify FL Studio playback or constitute a signed release.
+The Windows VST3 and Standalone workflow runs on pushes to main, pull requests, or manually from the Actions tab. It builds Release x64, runs DSP, sampler, and preset/state tests, and uploads `WEE-Windows-x64` only after all steps pass. Open a successful run, download that artifact, then extract the inner ZIP. Install the entire `WEE.vst3` folder into the standard VST3 directory; `WEE.exe` is the standalone. The package includes the presets and documentation. Artifacts expire after 14 days. A successful build does not verify FL Studio playback or constitute a signed release.
 
 ## Sample cartridge — Phase 2
 
