@@ -1,0 +1,10 @@
+<?xml version="1.0"?>
+<WEE schema="1">
+  <PARAM id="gain" value="0.23"/>
+  <PARAM id="attack" value="0.02"/>
+  <PARAM id="decay" value="0.4"/>
+  <PARAM id="sustain" value="0.55"/>
+  <PARAM id="release" value="0.5"/>
+  <PARAM id="cutoff" value="2400"/>
+  <PARAM id="waveform" value="1"/>
+</WEE>

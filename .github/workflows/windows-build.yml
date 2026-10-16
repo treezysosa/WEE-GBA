@@ -1,0 +1,44 @@
+name: Windows VST3 and Standalone
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  windows:
+    runs-on: windows-2022
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure x64
+        run: cmake -S . -B build/windows -G "Visual Studio 17 2022" -A x64 -DBUILD_TESTING=ON
+      - name: Build Release
+        run: cmake --build build/windows --config Release --parallel 2
+      - name: Run DSP and state tests
+        run: ctest --test-dir build/windows -C Release --output-on-failure
+      - name: Package instrument
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          New-Item -ItemType Directory -Force dist/WEE | Out-Null
+          Copy-Item build/windows/WEE_artefacts/Release/VST3/WEE.vst3 dist/WEE -Recurse
+          Copy-Item build/windows/WEE_artefacts/Release/Standalone/WEE.exe dist/WEE
+          Copy-Item Content dist/WEE -Recurse
+          Copy-Item README.md, LICENSE.md dist/WEE
+          Copy-Item docs dist/WEE -Recurse
+          Compress-Archive -Path dist/WEE -DestinationPath dist/WEE-Windows-x64.zip
+      - name: Upload Windows package
+        uses: actions/upload-artifact@v4
+        with:
+          name: WEE-Windows-x64
+          path: dist/WEE-Windows-x64.zip
+          if-no-files-found: error
+          retention-days: 14
+      - name: Upload test logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: WEE-build-test-logs
+          path: build/windows/Testing/Temporary/
+          if-no-files-found: ignore

@@ -1,0 +1,7 @@
+{
+  "schemaVersion": 1,
+  "product": "WEE",
+  "samples": [],
+  "notice": "Phase 1 contains synthesis presets only. No vocal recordings, sample library, or third-party audio is bundled.",
+  "requiredFutureSampleFields": ["id", "path", "sha256", "creator", "source", "license", "usageRights", "languageBCP47", "region", "recordingConsent", "tags"]
+}
