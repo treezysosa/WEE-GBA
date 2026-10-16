@@ -4,7 +4,7 @@
 
 Phase 1 Windows VST3/standalone and two suites passed in run 38850425598; Phase 2's sampler and three suites passed in run 38852200800; Phase 3's eight-layer hybrid rack and four suites passed in final run 38854504316. FL Studio/audio-device listening was not verified by those builds.
 
-## Phase 4 implementation
+## Phase 4 implementation (retained)
 
 - Background energy/onset detector, 50 ms refractory interval and at most 32 chops. Automatic analysis has manual corrections: add, delete, drag, split, select and numeric marker editing; keyboard navigation/preview.
 - Vocal source mode on each sample layer, 16 fixed voices per vocal layer, four overlap-add heads per voice and a bounded waveform-correlation alignment search. Pitch and source-clock duration are independent. Supports MIDI root/chop mapping, velocity, sustain/bend, reverse and tempo-dependent stretching. Existing layers/filter/modulation/mixing still apply.
@@ -32,11 +32,21 @@ The loader caches original audio (up to 128 MiB) and can hold original plus proc
 
 The host tail remains 6.25 seconds. Topology changes, steals and abrupt parameter edits can click; no oversampling/full anti-alias guarantee or hard real-time CPU guarantee is claimed. Wavetables remain built-in and FM remains two-operator. The UI retains an original handheld style with readable standard fonts.
 
+## Phase 5 implementation and validation gate
+
+Implemented deterministic rule-based melody/chord/arp/chop generation across 14 style profiles, seven scales, key/register, reproducible seeds, four locks, complexity/feel/density/variation, and 1/2/4/8/16-bar lengths. A functional GENERATE page offers a piano roll, progression degrees, playback controls and MIDI/WAV export. Two original pattern presets demonstrate 8 and 16 bars. No external music/AI content was used.
+
+A bounded immutable pattern exchange feeds a sample-positioned loop scheduler and a separate layered rack. Keyboard playing and the earlier vocal sequencer retain their rack; stopping a generated pattern clears only its own voices. Pattern settings and exact notes persist in schema 5; older schemas migrate to an empty stopped generator. Generation, tree serialization, sorted-event preparation and export are outside processBlock. Portable scheduler sections include an allocation guard. A second rack raises instance memory and can increase CPU significantly during generated/live overlap; it has not been profiled in a DAW.
+
+Portable generator tests exercise 1960 style/mode/length/scale combinations, reproducibility, locks, note bounds/key membership, sample-exact timing at three rates/four buffer sizes, looping/transport, no playback allocations and independently parsed MIDI. Windows CI must build VST3/standalone and pass six suites. New JUCE integration tests cover schema-5 recall/rejection, factory patterns, audible isolated playback, host play/stop, readable eight-bar MIDI and audible sixteen-bar WAV with exact duration, plus failure on missing samples. Consult the Phase 5 PR/checks for actual build outcomes.
+
+Limits: styles are compact heuristics rather than genre-complete composition systems. Fixed 4/4 only, one pattern mode at a time, at most 1024 notes, one shared external recording. Locks preserve degrees or timing with documented mode/length exceptions. Mid-loop seeks do not rebuild already-held notes. Generator controls are metadata, not automation parameters; changing them while playing can restart the pattern. Export includes the current rack, but excludes keyboard/controller performance and separate vocal sequencing. Exact-length WAV cuts late release tails and has 5 ms edge fades; no seamless-tail claim. No native drag-out, MIDI-through output, note editor, odd-meter arranger or AI provider is implemented. Future AI generation can produce the same bounded Pattern document off-thread without changing playback/export.
+
 ## Next steps
 
-1. Confirm the Phase 4 Windows build/tests; run FL Studio/pluginval and actual editing/listening tests at buffers 32–1024, with transport seeks/loops, automatic/manual slices, automation, relocation, export/import and multiple instances.
-2. Improve transient analysis, high-ratio pitch/stretch quality, streaming/memory use and seamless per-voice formant processing after profiling.
-3. Phase 5: deterministic melody/chord/chop pattern generation, locks/scales/seeds, 8/16-bar arrangements and MIDI/audio loop export.
-4. Later: full effects, library/indexing/favorites, complete navigation, undo/A-B/MIDI learn, profiling, signed installer and release validation.
+1. Run FL Studio/pluginval and actual editing/listening tests at buffers 32–1024: transport seeks/loop boundaries, 8/16-bar sync, locks/seeds, saved projects, MIDI and audio import, automation, relocation and multiple instances. These remain unverified in the build environment.
+2. Profile both racks, vocal stretching and worst-case RAM; improve memory sharing/streaming, transient quality and seamless per-voice formants.
+3. Phase 6: full effects rack, indexed/favorited preset browsing, complete handheld navigation, UI polish and shortcuts.
+4. Phase 7: profiling, crash/glitch validation, DAW matrix, signed installer and release documentation.
 
-Live microphone effects, seamless/polyphonic formant preservation, phase-vocoder-quality long stretching, automatic BPM/key detection, arrangement/MIDI export, native drag-out, separate sample files per layer/multisample zones, full effects, generators, installers and the massive vocal library remain unfinished.
+The massive licensed vocal library, seamless live/polyphonic formants, separate samples per layer/multisample zones, complete effects, undo/A-B/MIDI learn, installers and release validation remain unfinished.

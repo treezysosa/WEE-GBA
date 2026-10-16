@@ -3,6 +3,8 @@
 #include "dsp/LayerRack.h"
 #include "sampling/SampleLoader.h"
 #include "vocal/ChopSequencer.h"
+#include "generation/GenerationState.h"
+#include "generation/LoopExporter.h"
 class WeeProcessor final : public juce::AudioProcessor, private juce::MidiKeyboardStateListener, private juce::AudioProcessorValueTreeState::Listener {
 public:
     WeeProcessor();
@@ -40,6 +42,15 @@ public:
     bool exporting()const{return loader.exporting.load();}
     juce::File lastExport()const{return loader.lastExport();}
     wee::VocalConfig vocalSettings()const noexcept;
+    wee::GeneratorDocument generatorDocument() const;
+    bool setGeneratorSettings(const wee::GeneratorSettings&);
+    bool generateLoop(int action=0); // 0 same seed, 1 next seed, 2 randomize controls/sound
+    void playGenerated(bool play) noexcept { generatorPlaying.store(play); }
+    bool generatedPlaying() const noexcept { return generatorPlaying.load(); }
+    uint64_t generatorRevision() const noexcept { return generationRevision.load(); }
+    bool exportGenerated(const juce::File&,bool midi);
+    bool loopExporting() const noexcept { return loopExporter.busy.load(); }
+    juce::String loopExportStatus() const { return loopExporter.status(); }
     static juce::String parameterId(size_t layer, size_t param);
     void clearSample();
     juce::String sampleStatus() const { return loader.status(); }
@@ -64,9 +75,16 @@ private:
     static juce::AudioProcessorValueTreeState::ParameterLayout layout();
     bool applyPatch(juce::ValueTree, const juce::File& base = {});
     juce::ValueTree patchState();
-    juce::CriticalSection contentStateMutex; // Never acquired by processBlock.
+    mutable juce::CriticalSection contentStateMutex; // Never acquired by processBlock.
     wee::LayerRack rack;
     wee::SampleLoader loader;
+    wee::LayerRack generatedRack;
+    wee::SampleExchange<wee::GeneratorDocument> generatedExchange;
+    wee::PatternPlayer patternPlayer;
+    wee::LoopExporter loopExporter;
+    std::atomic<bool> generatorPlaying{false};
+    std::atomic<uint64_t> generationRevision{0};
+    void publishGenerator(const wee::GeneratorDocument&);
     wee::ChopSequencer sequencer;
     std::array<std::atomic<float>*,wee::vocalParamCount> vocalValues {};
     std::array<std::array<std::atomic<float>*, wee::paramCount>, wee::layerCount> values;

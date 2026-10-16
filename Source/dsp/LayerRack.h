@@ -76,7 +76,8 @@ public:
     void sustainPedal(bool down) noexcept {pedal=down;for(auto& l:layers){l.analog.sustainPedal(down);l.sampler.sustainPedal(down);l.hybrid.sustainPedal(down);l.vocal.sustainPedal(down);}}
     void configureVocal(const VocalConfig& c)noexcept{vocalConfig=c;}
     void stopVocalLane(int lane)noexcept{for(auto& l:layers)l.vocal.stopLane(lane);}
-    void sequenceOn(int note,float velocity,bool ready)noexcept{if(!ready)return;for(auto& l:layers)if(l.config.v[Enabled]>=.5f && l.config.engine()==5){l.velocity=velocity;l.vocal.noteOn(note,velocity,l.config,vocalConfig,1,note-int(vocalConfig.v[VBase]));}}
+    void sequenceSlice(int note,float velocity,int slice,bool ready)noexcept{if(!ready)return;for(auto& l:layers)if(l.config.v[Enabled]>=.5f && l.config.engine()==5){l.velocity=velocity;l.vocal.noteOn(note,velocity,l.config,vocalConfig,1,slice);}}
+    void sequenceOn(int note,float velocity,bool ready)noexcept{sequenceSlice(note,velocity,note-int(vocalConfig.v[VBase]),ready);}
     void sequenceOff(int note)noexcept{for(auto& l:layers)l.vocal.noteOff(note,1);}
     void previewSlice(int slice,size_t layer,bool ready)noexcept{stopVocalLane(2);if(ready && layer<layerCount){auto& l=layers[layer];if(l.config.v[Enabled]>=.5f && l.config.engine()==5)l.vocal.noteOn(int(vocalConfig.v[VBase])+slice,1,l.config,vocalConfig,2,slice);}}
     void modWheel(float value) noexcept {wheel=std::clamp(value,0.0f,1.0f);}
