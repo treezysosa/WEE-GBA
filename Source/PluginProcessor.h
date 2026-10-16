@@ -1,6 +1,6 @@
 #pragma once
 #include <juce_audio_utils/juce_audio_utils.h>
-#include "dsp/Engine.h"
+#include "dsp/LayerRack.h"
 #include "sampling/SampleLoader.h"
 class WeeProcessor final : public juce::AudioProcessor, private juce::MidiKeyboardStateListener {
 public:
@@ -16,7 +16,7 @@ public:
     const juce::String getName() const override { return "WEE"; }
     bool acceptsMidi() const override { return true; }
     bool producesMidi() const override { return false; }
-    double getTailLengthSeconds() const override { return 5; }
+    double getTailLengthSeconds() const override { return 6.25; }
     int getNumPrograms() override { return 1; }
     int getCurrentProgram() override { return 0; }
     void setCurrentProgram(int) override {}
@@ -26,7 +26,8 @@ public:
     void setStateInformation(const void*, int) override;
     bool loadPreset(const juce::File&);
     bool savePreset(const juce::File&);
-    void loadSample(const juce::File&);
+    void loadSample(const juce::File&, size_t layer = 0);
+    static juce::String parameterId(size_t layer, size_t param);
     void clearSample();
     juce::String sampleStatus() const { return loader.status(); }
     std::vector<float> sampleWaveform() const { return loader.waveform(); }
@@ -37,6 +38,7 @@ public:
     std::atomic<float> peak {0}, cpu {0};
     std::atomic<double> bpm {120};
     std::atomic<int> voiceCount {0};
+    std::array<std::atomic<int>, wee::layerCount> layerVoices {};
 private:
     void handleNoteOn(juce::MidiKeyboardState*, int, int note, float velocity) override;
     void handleNoteOff(juce::MidiKeyboardState*, int, int note, float) override;
@@ -48,11 +50,10 @@ private:
     bool applyPatch(juce::ValueTree, const juce::File& base = {});
     juce::ValueTree patchState();
     juce::CriticalSection contentStateMutex; // Never acquired by processBlock.
-    wee::Engine engine;
-    wee::Sampler sampler;
+    wee::LayerRack rack;
     wee::SampleLoader loader;
-    int previousSource = 0;
-    std::array<std::atomic<float>*, 14> values;
+    std::array<std::array<std::atomic<float>*, wee::paramCount>, wee::layerCount> values;
+    std::atomic<float>* masterGain = nullptr;
     double rate = 44100;
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(WeeProcessor)
 };

@@ -1,84 +1,106 @@
 #include "PluginProcessor.h"
 #include "ui/PluginEditor.h"
 #include <charconv>
+juce::String WeeProcessor::parameterId(size_t layer, size_t param) {
+    return (layer == 0 ? juce::String() : "l" + juce::String(int(layer+1)) + "_") + wee::specs[param].id;
+}
 namespace {
-constexpr const char* ids[] = {"gain", "attack", "decay", "sustain", "release", "cutoff", "waveform", "source", "root", "sampleStart", "sampleEnd", "loop", "keyLow", "keyHigh"};
-bool migrateAndValidate(juce::ValueTree& tree, juce::AudioProcessorValueTreeState& state) {
+bool numberValue(const juce::ValueTree& child, float& number) {
+    const auto value = child.getProperty("value").toString().toStdString();
+    const auto parsed = std::from_chars(value.data(), value.data() + value.size(), number);
+    return parsed.ec == std::errc{} && parsed.ptr == value.data() + value.size() && std::isfinite(number);
+}
+bool migrateAndValidate(juce::ValueTree& tree) {
     if (!tree.hasType("WEE")) return false;
     const int schema = int(tree.getProperty("schema", 0));
-    if ((schema != 1 && schema != 2) || tree.getNumChildren() != (schema == 1 ? 7 : 14)) return false;
-    for (int i = 0; i < (schema == 1 ? 7 : 14); ++i) {
+    const int expected = schema == 1 ? 7 : (schema == 2 ? 14 : (schema == 3 ? int(wee::layerCount * wee::paramCount + 1) : -1));
+    if (tree.getNumChildren() != expected || expected < 0) return false;
+    juce::ValueTree result = tree.createCopy(); result.removeAllChildren(nullptr);
+    size_t seen = 0;
+    for (size_t layer = 0; layer < wee::layerCount; ++layer) {
+        std::array<float, wee::paramCount> values {};
+        const wee::LayerConfig defaults(layer);
+        for (size_t p = 0; p < wee::paramCount; ++p) {
+            const auto id = WeeProcessor::parameterId(layer,p);
+            const auto& spec = wee::specs[p];
+            float number = defaults.v[p];
+            if (schema == 3 || (layer == 0 && int(p) < expected)) {
+                int found = 0;
+                for (const auto& child : tree) if (child.hasType("PARAM") && child.getProperty("id").toString() == id) {
+                    if (!numberValue(child, number)) return false;
+                    ++found;
+                }
+                if (found != 1 || number < spec.min || number > spec.max || (spec.type != wee::ParamType::continuous && number != std::floor(number))) return false;
+                ++seen;
+            }
+            values[p] = number;
+            juce::ValueTree child("PARAM"); child.setProperty("id",id,nullptr); child.setProperty("value",number,nullptr); result.appendChild(child,nullptr);
+        }
+        if (values[wee::Start] >= values[wee::End] || values[wee::Low] > values[wee::High]) return false;
+    }
+    float master = 1;
+    if (schema == 3) {
         int found = 0;
-        for (const auto& child : tree) if (child.hasType("PARAM") && child.getProperty("id").toString() == ids[i]) {
-            const auto value = child.getProperty("value").toString().toStdString();
-            float number = 0;
-            const auto parsed = std::from_chars(value.data(), value.data() + value.size(), number);
-            auto* parameter = state.getParameter(ids[i]);
-            if (parsed.ec != std::errc{} || parsed.ptr != value.data() + value.size() || !std::isfinite(number) || !parameter) return false;
-            const auto range = parameter->getNormalisableRange();
-            if (number < range.start || number > range.end || (range.interval >= 1 && number != std::floor(number))) return false;
+        for (const auto& child : tree) if (child.hasType("PARAM") && child.getProperty("id").toString() == "masterGain") {
+            if (!numberValue(child, master) || master < 0 || master > 1) return false;
             ++found;
         }
         if (found != 1) return false;
+        ++seen;
     }
-    if (schema == 1) {
-        for (int i = 7; i < 14; ++i) {
-            auto* param = state.getParameter(ids[i]);
-            juce::ValueTree child("PARAM"); child.setProperty("id", ids[i], nullptr);
-            child.setProperty("value", param->convertFrom0to1(param->getDefaultValue()), nullptr);
-            tree.appendChild(child, nullptr);
-        }
-        tree.removeProperty("samplePath", nullptr); tree.removeProperty("sampleRelative", nullptr);
-    }
-    auto get = [&](const char* id) { return float(tree.getChildWithProperty("id", id).getProperty("value")); };
-    if (get("sampleStart") >= get("sampleEnd") || get("keyLow") > get("keyHigh")) return false;
-    if (tree.getProperty("samplePath").toString().length() > 4096 || tree.getProperty("sampleRelative").toString().length() > 4096) return false;
-    tree.setProperty("schema", 2, nullptr);
+    if (seen != size_t(expected)) return false;
+    juce::ValueTree global("PARAM"); global.setProperty("id","masterGain",nullptr); global.setProperty("value",master,nullptr); result.appendChild(global,nullptr);
+    if (result.getProperty("samplePath").toString().length() > 4096 || result.getProperty("sampleRelative").toString().length() > 4096) return false;
+    if (schema == 1) {result.removeProperty("samplePath",nullptr);result.removeProperty("sampleRelative",nullptr);}
+    result.setProperty("schema",3,nullptr); tree = result;
     return true;
 }
 }
 juce::AudioProcessorValueTreeState::ParameterLayout WeeProcessor::layout() {
-    juce::AudioProcessorValueTreeState::ParameterLayout p;
-    auto add = [&](const char* id, const char* name, float lo, float hi, float def, float skew) {
-        p.add(std::make_unique<juce::AudioParameterFloat>(juce::ParameterID{id, 1}, name,
-            juce::NormalisableRange<float>(lo, hi, 0.0f, skew), def));
-    };
-    add("gain", "Output", 0, 1, 0.22f, 1);
-    add("attack", "Attack", 0.001f, 3, 0.01f, 0.3f);
-    add("decay", "Decay", 0.001f, 3, 0.18f, 0.3f);
-    add("sustain", "Sustain", 0, 1, 0.7f, 1);
-    add("release", "Release", 0.001f, 5, 0.35f, 0.3f);
-    add("cutoff", "Tone (Hz)", 20, 20000, 8000, 0.25f);
-    p.add(std::make_unique<juce::AudioParameterChoice>(juce::ParameterID{"waveform", 1}, "Oscillator", juce::StringArray{"Sine", "Saw", "Pulse"}, 0));
-    p.add(std::make_unique<juce::AudioParameterChoice>(juce::ParameterID{"source", 1}, "Sound source", juce::StringArray{"Oscillator", "Sample"}, 0));
-    p.add(std::make_unique<juce::AudioParameterInt>(juce::ParameterID{"root", 1}, "Sample root (MIDI)", 0, 127, 60));
-    add("sampleStart", "Sample start", 0, 1, 0, 1);
-    add("sampleEnd", "Sample end", 0, 1, 1, 1);
-    p.add(std::make_unique<juce::AudioParameterBool>(juce::ParameterID{"loop", 1}, "Sample loop", false));
-    p.add(std::make_unique<juce::AudioParameterInt>(juce::ParameterID{"keyLow", 1}, "Sample lowest MIDI key", 0, 127, 0));
-    p.add(std::make_unique<juce::AudioParameterInt>(juce::ParameterID{"keyHigh", 1}, "Sample highest MIDI key", 0, 127, 127));
-    return p;
+    juce::AudioProcessorValueTreeState::ParameterLayout parameters;
+    for(size_t layer=0;layer<wee::layerCount;++layer) for(size_t p=0;p<wee::paramCount;++p) {
+        const auto& spec=wee::specs[p];
+        const auto id=juce::ParameterID{parameterId(layer,p),1};
+        const auto name="Layer " + juce::String(int(layer+1)) + " " + spec.name;
+        const float initial=wee::LayerConfig(layer).v[p];
+        switch(spec.type) {
+            case wee::ParamType::continuous:
+                parameters.add(std::make_unique<juce::AudioParameterFloat>(id,name,juce::NormalisableRange<float>(spec.min,spec.max,0.0f,spec.skew),initial)); break;
+            case wee::ParamType::integer:
+                parameters.add(std::make_unique<juce::AudioParameterInt>(id,name,int(spec.min),int(spec.max),int(initial))); break;
+            case wee::ParamType::boolean:
+                parameters.add(std::make_unique<juce::AudioParameterBool>(id,name,initial>=.5f)); break;
+            case wee::ParamType::choice:
+                parameters.add(std::make_unique<juce::AudioParameterChoice>(id,name,juce::StringArray::fromTokens(spec.choices,"|",""),int(initial))); break;
+        }
+    }
+    parameters.add(std::make_unique<juce::AudioParameterFloat>(juce::ParameterID{"masterGain",1},"Master level",0.0f,1.0f,1.0f));
+    return parameters;
 }
 WeeProcessor::WeeProcessor() : AudioProcessor(BusesProperties().withOutput("Output", juce::AudioChannelSet::stereo(), true)),
     state(*this, nullptr, "WEE", layout()) {
     keyboard.addListener(this);
-    for (size_t i = 0; i < values.size(); ++i) values[i] = state.getRawParameterValue(ids[i]);
+    for(size_t layer=0;layer<wee::layerCount;++layer) for(size_t p=0;p<wee::paramCount;++p) values[layer][p]=state.getRawParameterValue(parameterId(layer,p));
+    masterGain=state.getRawParameterValue("masterGain");
 }
 bool WeeProcessor::isBusesLayoutSupported(const BusesLayout& b) const {
     return b.getMainInputChannelSet().isDisabled() && (b.getMainOutputChannelSet() == juce::AudioChannelSet::stereo() || b.getMainOutputChannelSet() == juce::AudioChannelSet::mono());
 }
-void WeeProcessor::prepareToPlay(double sr, int) { rate = sr; engine.prepare(sr); sampler.prepare(sr); }
+void WeeProcessor::prepareToPlay(double sr, int) { rate = sr; rack.prepare(sr); }
 void WeeProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi) {
     juce::ScopedNoDenormals noDenormals;
     const auto start = juce::Time::getHighResolutionTicks();
     buffer.clear();
-    if (loader.exchange.adopt()) sampler.setSample(loader.exchange.current());
-    const int source = int(values[7]->load());
-    if (source != previousSource) { engine.allNotesOff(true); sampler.allNotesOff(true); previousSource = source; }
-    if (panicRequested.exchange(false)) { engine.allNotesOff(true); sampler.allNotesOff(true); }
-    const wee::SampleSettings settings {int(values[8]->load()), int(values[12]->load()), int(values[13]->load()), values[9]->load(), values[10]->load(), values[11]->load() >= 0.5f};
-    auto noteOn = [&](int note, float velocity) { if (source) { if (!loader.loading.load() && loader.exchange.current() && loader.exchange.current()->generation == loader.completed.load()) sampler.noteOn(note, velocity, settings); } else engine.noteOn(note, velocity); };
-    auto noteOff = [&](int note) { engine.noteOff(note); sampler.noteOff(note); };
+    if (loader.exchange.adopt()) rack.setSample(loader.exchange.current());
+    if (auto* host = getPlayHead()) if (auto position = host->getPosition()) if (auto tempo = position->getBpm()) bpm.store(*tempo);
+    std::array<wee::LayerConfig, wee::layerCount> configs;
+    for(size_t layer=0;layer<wee::layerCount;++layer) for(size_t p=0;p<wee::paramCount;++p) configs[layer].v[p]=values[layer][p]->load();
+    rack.configure(configs,masterGain->load(),bpm.load());
+    if (panicRequested.exchange(false)) rack.allNotesOff(true);
+    const auto* current = loader.exchange.current();
+    const bool sampleReady = !loader.loading.load() && current && current->generation == loader.completed.load();
+    auto noteOn = [&](int note, float velocity) { rack.noteOn(note,velocity,sampleReady); };
+    auto noteOff = [&](int note) { rack.noteOff(note); };
     const int ready = keyQueue.getNumReady();
     int first, n1, second, n2;
     keyQueue.prepareToRead(ready, first, n1, second, n2);
@@ -86,13 +108,11 @@ void WeeProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuff
     for (int i = 0; i < n1; ++i) key(first + i);
     for (int i = 0; i < n2; ++i) key(second + i);
     keyQueue.finishedRead(n1 + n2);
-    wee::Parameters p {values[0]->load(), values[1]->load(), values[2]->load(), values[3]->load(), values[4]->load(), values[5]->load(), int(values[6]->load())};
-    if (auto* host = getPlayHead()) if (auto position = host->getPosition()) if (auto tempo = position->getBpm()) bpm.store(*tempo);
     auto render = [&](int from, int to) {
         if (to > from) {
             auto* left = buffer.getWritePointer(0, from);
             auto* right = buffer.getNumChannels() > 1 ? buffer.getWritePointer(1, from) : nullptr;
-            if (source) sampler.render(left, right, to - from, p); else engine.render(left, right, to - from, p);
+            rack.render(left,right,to-from);
         }
     };
     int cursor = 0;
@@ -104,30 +124,34 @@ void WeeProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuff
         if (metadata.numBytes < 1) continue;
         const auto* bytes = metadata.data;
         const auto kind = bytes[0] & 0xf0;
+        if (kind == 0xd0 && metadata.numBytes >= 2) { rack.aftertouch(float(bytes[1] & 127) / 127); continue; }
         if (metadata.numBytes < 3) continue;
         const int d1 = bytes[1] & 127, d2 = bytes[2] & 127;
         if (kind == 0x90 && d2) noteOn(d1, float(d2) / 127.0f);
         else if (kind == 0x80 || kind == 0x90) noteOff(d1);
-        else if (kind == 0xe0) { engine.pitchWheel(d1 | (d2 << 7)); sampler.pitchWheel(d1 | (d2 << 7)); }
-        else if (kind == 0xb0 && d1 == 64) { engine.sustainPedal(d2 >= 64); sampler.sustainPedal(d2 >= 64); }
-        else if (kind == 0xb0 && d1 == 120) { engine.allNotesOff(true); sampler.allNotesOff(true); }
-        else if (kind == 0xb0 && d1 == 123) { engine.allNotesOff(); sampler.allNotesOff(); }
+        else if (kind == 0xe0) rack.pitchWheel(d1 | (d2 << 7));
+        else if (kind == 0xb0 && d1 == 64) rack.sustainPedal(d2 >= 64);
+        else if (kind == 0xb0 && d1 == 1) rack.modWheel(float(d2)/127);
+        else if (kind == 0xa0) rack.aftertouch(float(d2)/127);
+        else if (kind == 0xb0 && d1 == 120) rack.allNotesOff(true);
+        else if (kind == 0xb0 && d1 == 123) rack.allNotesOff();
     }
     render(cursor, buffer.getNumSamples()); midi.clear();
     peak.store(buffer.getNumSamples() ? buffer.getMagnitude(0, buffer.getNumSamples()) : 0);
-    voiceCount.store(source ? sampler.activeVoices() : engine.activeVoices());
+    voiceCount.store(rack.activeVoices());
+    for(size_t layer=0;layer<wee::layerCount;++layer) layerVoices[layer].store(rack.activeVoices(layer));
     if (buffer.getNumSamples()) cpu.store(float(juce::Time::highResolutionTicksToSeconds(juce::Time::getHighResolutionTicks() - start) * rate / buffer.getNumSamples() * 100));
 }
 juce::ValueTree WeeProcessor::patchState() {
     const juce::ScopedLock lock(contentStateMutex);
-    auto tree = state.copyState(); tree.setProperty("schema", 2, nullptr); return tree;
+    auto tree = state.copyState(); tree.setProperty("schema", 3, nullptr); return tree;
 }
 void WeeProcessor::getStateInformation(juce::MemoryBlock& dest) {
     if (auto xml = patchState().createXml()) copyXmlToBinary(*xml, dest);
 }
 bool WeeProcessor::applyPatch(juce::ValueTree tree, const juce::File& base) {
     const juce::ScopedLock lock(contentStateMutex);
-    if (!migrateAndValidate(tree, state)) return false;
+    if (!migrateAndValidate(tree)) return false;
     auto path = tree.getProperty("samplePath").toString();
     const auto relative = tree.getProperty("sampleRelative").toString();
     // File-based presets can relocate with their sample folder. Host state uses
@@ -145,7 +169,7 @@ void WeeProcessor::setStateInformation(const void* data, int size) {
 }
 bool WeeProcessor::savePreset(const juce::File& file) {
     auto tree = patchState();
-    if (!migrateAndValidate(tree, state)) return false;
+    if (!migrateAndValidate(tree)) return false;
     const auto path = tree.getProperty("samplePath").toString();
     if (path.isNotEmpty()) tree.setProperty("sampleRelative", juce::File(path).getRelativePathFrom(file.getParentDirectory()), nullptr);
     auto xml = tree.createXml(); juce::TemporaryFile temp(file);
@@ -156,12 +180,15 @@ bool WeeProcessor::loadPreset(const juce::File& file) {
     auto xml = juce::XmlDocument::parse(file);
     return xml && applyPatch(juce::ValueTree::fromXml(*xml), file.getParentDirectory());
 }
-void WeeProcessor::loadSample(const juce::File& file) {
+void WeeProcessor::loadSample(const juce::File& file, size_t layer) {
+    if(layer>=wee::layerCount) return;
     const juce::ScopedLock lock(contentStateMutex);
     const auto path = file.getFullPathName();
     state.state.setProperty("samplePath", path, nullptr);
-    auto* source = state.getParameter("source");
-    source->beginChangeGesture(); source->setValueNotifyingHost(1); source->endChangeGesture();
+    const bool granular = values[layer][wee::Source]->load()<.5f && int(values[layer][wee::SynthMode]->load())==3;
+    auto enable=[&](size_t p,float value) {auto* param=state.getParameter(parameterId(layer,p));param->beginChangeGesture();param->setValueNotifyingHost(param->convertTo0to1(value));param->endChangeGesture();};
+    if(!granular) enable(wee::Source,1);
+    enable(wee::Enabled,1);
     panic(); loader.request(path);
 }
 void WeeProcessor::clearSample() {
