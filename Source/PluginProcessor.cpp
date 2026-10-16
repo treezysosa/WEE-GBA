@@ -256,7 +256,7 @@ bool WeeProcessor::generateLoop(int action){
             wee::PatternRng random{doc.settings.seed^0x6512cba3u};
             for(size_t l=0;l<wee::layerCount;++l){wee::LayerConfig defaults(l);for(size_t p=0;p<wee::paramCount;++p){auto* param=state.getParameter(parameterId(l,p));param->setValueNotifyingHost(param->convertTo0to1(defaults.v[p]));}}
             auto put=[&](size_t p,float v){auto* param=state.getParameter(parameterId(0,p));param->setValueNotifyingHost(param->convertTo0to1(v));};
-            put(wee::SynthMode,float(random.pick(3)));put(wee::Waveform,float(random.pick(4)));put(wee::Cutoff,float(1200+random.pick(10000)));put(wee::Attack,.003f+random.pick(20)*.002f);put(wee::Release,.12f+random.pick(20)*.02f);put(wee::WTPosition,random.pick(101)/100.0f);put(wee::FMIndex,random.pick(201)/100.0f);
+            put(wee::SynthMode,float(random.pick(3)));put(wee::Waveform,float(random.pick(3)));put(wee::Cutoff,float(1200+random.pick(10000)));put(wee::Attack,.003f+random.pick(20)*.002f);put(wee::Release,.12f+random.pick(20)*.02f);put(wee::WTPosition,random.pick(101)/100.0f);put(wee::FMIndex,random.pick(201)/100.0f);
         }
     }
     const auto slices=loader.slices();auto pattern=wee::generatePattern(doc.settings,&doc.pattern,slices.count,int(vocalValues[wee::VBase]->load()));

@@ -28,7 +28,7 @@ struct Pattern {
         if(count<0 || count>maxPatternNotes || (bars!=1 && bars!=2 && bars!=4 && bars!=8 && bars!=16) || mode<0 || mode>3)return false;
         for(auto c:chords)if(c<0 || c>6)return false;
         double previous=-1;
-        for(int i=0;i<count;++i){const auto& n=notes[size_t(i)];if(!std::isfinite(n.beat) || !std::isfinite(n.duration) || n.beat<0 || n.beat<previous || n.duration<.001 || n.beat+n.duration>beats()+1e-7 || n.note<0 || n.note>127 || n.velocity<1 || n.velocity>127 || n.degree<0 || n.degree>35)return false;previous=n.beat;}return true;
+        for(int i=0;i<count;++i){const auto& n=notes[size_t(i)];if(!std::isfinite(n.beat) || !std::isfinite(n.duration) || n.beat<0 || n.beat<previous || n.duration<.001 || n.beat+n.duration>beats()+1e-7 || n.note<0 || n.note>127 || n.velocity<1 || n.velocity>127 || n.degree<0 || n.degree>35 || (mode==3 && n.degree>31))return false;previous=n.beat;}return true;
     }
     void prepare()noexcept {
         for(int i=0;i<count;++i){const auto& n=notes[size_t(i)];events[size_t(i*2)]={n.beat,n.note,n.velocity,true,n.degree};events[size_t(i*2+1)]={n.beat+n.duration,n.note,0,false,n.degree};}
@@ -56,7 +56,7 @@ inline Pattern generatePattern(const GeneratorSettings& c,const Pattern* previou
     constexpr int spacing[14]={2,2,2,2,2,1,2,2,8,4,1,4,2,4};
     constexpr int gate[14]={75,55,65,85,65,35,70,70,95,90,45,95,65,90};
     const bool old=previous && previous->count>0 && previous->valid() && previous->mode==c.mode;
-    for(int b=0;b<c.bars;++b){int degree=progressions[styleProgression[c.style]][b%4];if(b>=4 && melody.pick(100)<c.variation)degree=melody.pick(7);out.chords[size_t(b)]=old && c.lockMelody?previous->chords[size_t(b%previous->bars)]:degree;}
+    for(int b=0;b<c.bars;++b){int degree=progressions[styleProgression[c.style]][b%4];if(b>=4 && melody.pick(100)<c.variation)degree=melody.pick(7);if(c.mode==1 && b>0 && melody.pick(100)<c.variation/3)degree=(degree+1)%7;out.chords[size_t(b)]=old && c.lockMelody?previous->chords[size_t(b%previous->bars)]:degree;}
     auto append=[&](double beat,double duration,int degree,int velocity){if(out.count>=maxPatternNotes)return;auto& n=out.notes[size_t(out.count++)];n={beat,std::min(duration,out.beats()-beat),c.mode==3?std::clamp(base+degree,0,127):scalePitch(c,degree),velocity,degree};};
     if(c.lockRhythm && old){
         const double ratio=out.beats()/previous->beats();
@@ -73,7 +73,7 @@ inline Pattern generatePattern(const GeneratorSettings& c,const Pattern* previou
             for(int voice=0;voice<voices;++voice){
                 int degree=chord+(c.mode==1?voice*2:(c.mode==2?(tick/unit)%4*2:2*melody.pick(c.complexity>60?4:3)));
                 if(c.mode==0 && melody.pick(100)<c.complexity)degree=chord+melody.pick(c.scale==4?5:7);
-                if(c.mode!=3 && melody.pick(100)<c.variation)degree=std::clamp(degree+melody.pick(3)-1,0,20);
+                if((c.mode==0 || c.mode==2) && melody.pick(100)<c.variation)degree=std::clamp(degree+melody.pick(3)-1,0,20);
                 if(c.mode==3)degree=(ordinal>0 && melody.pick(100)>=c.variation)?out.notes[size_t(out.count-1)].degree:melody.pick(std::clamp(slices,1,32));
                 if(old && c.lockMelody)degree=previous->notes[size_t(ordinal%previous->count)].degree;
                 if(c.mode==3)degree%=std::clamp(slices,1,32);

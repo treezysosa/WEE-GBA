@@ -7,6 +7,9 @@
 static bool audio=false;static size_t allocations=0;
 void* operator new(std::size_t n){if(audio)++allocations;if(auto* p=std::malloc(n?n:1))return p;throw std::bad_alloc();}
 void* operator new[](std::size_t n){return ::operator new(n);}void operator delete(void* p)noexcept{std::free(p);}void operator delete[](void* p)noexcept{std::free(p);}void operator delete(void* p,std::size_t)noexcept{std::free(p);}void operator delete[](void* p,std::size_t)noexcept{std::free(p);}
+void* operator new(std::size_t n,const std::nothrow_t&)noexcept{try{return ::operator new(n);}catch(...){return nullptr;}}
+void* operator new[](std::size_t n,const std::nothrow_t&)noexcept{try{return ::operator new[](n);}catch(...){return nullptr;}}
+void operator delete(void* p,const std::nothrow_t&)noexcept{std::free(p);}void operator delete[](void* p,const std::nothrow_t&)noexcept{std::free(p);}
 void check(bool ok,const char* text){if(!ok){std::cerr<<text<<'\n';std::exit(1);}}
 bool equal(const wee::Pattern& a,const wee::Pattern& b){if(a.count!=b.count || a.bars!=b.bars || a.mode!=b.mode || a.chords!=b.chords)return false;for(int i=0;i<a.count;++i){const auto& x=a.notes[size_t(i)];const auto& y=b.notes[size_t(i)];if(x.beat!=y.beat || x.duration!=y.duration || x.note!=y.note || x.velocity!=y.velocity || x.degree!=y.degree)return false;}return true;}
 uint32_t var(const std::vector<uint8_t>& b,size_t& i){uint32_t value=0;for(int n=0;n<4;++n){check(i<b.size(),"MIDI variable bounds");const auto c=b[i++];value=(value<<7)|(c&127);if(!(c&128))return value;}check(false,"invalid MIDI variable");return 0;}

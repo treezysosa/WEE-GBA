@@ -2,7 +2,7 @@
 
 An original C++20/JUCE Windows x64 VST3 and standalone instrument with a handheld-console interface. Eight layers combine virtual analog, sample playback, wavetable, two-operator FM and granular foundations. No proprietary instrument code, branded console assets, scraped recordings or voice impersonations are included.
 
-**Verification:** Phase 4 Windows VST3/standalone and five suites passed in run 38857986037. Phase 5 adds a sixth suite; consult the Phase 5 PR checks for the current Windows compilation and integration result. Actual FL Studio playback, human listening, native GUI interaction and pluginval remain unverified.
+**Verification:** Phase 5 Windows x64 VST3/standalone and all six test suites passed in run 38859529958. Consult the Phase 5 PR checks for the current revision. Local portable suites and generator address/undefined-behavior sanitizers pass. Actual FL Studio playback, human listening, native GUI interaction and pluginval remain unverified.
 
 ## Build on Windows
 
@@ -98,7 +98,7 @@ Scroll down for the **16-step chop sequencer**. Set Run chop sequencer, step cou
 
 ## Generate — Phase 5
 
-Open **GENERATE**, choose a style, output mode, key/scale and length, then press **GENERATE**. The result is an original deterministic rule-based pattern. Styles cover Pop, Dark pop, Indie pop, Soul, R&B, Trap, Lo-fi, City pop, Ambient, Horror, Retro video game, Cinematic, Rock and Dream pop. They bias rhythm spacing, gates and scale-degree progressions; they do not emulate artists or use recorded songs. Melody, Chords, Arpeggio and Vocal chops are separate output modes. Chords use one triad/seventh per bar. A progression-degree list and piano roll show the saved result.
+Open **GENERATE**, choose a style, output mode, key/scale and length, then press **GENERATE**. The result is an original deterministic rule-based pattern. Styles cover Pop, Dark pop, Indie pop, Soul, R&B, Trap, Lo-fi, City pop, Ambient, Horror, Retro video game, Cinematic, Rock and Dream pop. They bias rhythm spacing, gates and scale-degree progressions; they do not emulate artists or use recorded songs. Melody, Chords, Arpeggio and Vocal chops are separate output modes. Chords stack three or four scale tones every other degree, once per bar. A progression-degree list and piano roll show the saved result.
 
 Lengths are 1, 2, 4, 8 or 16 bars in **4/4**, regardless of the host's time signature. Major, natural minor, Dorian, Mixolydian, minor pentatonic, harmonic minor and Phrygian scales are available. Root and octave set the register. Complexity changes subdivision, chord size and pitch choice; Density changes non-downbeat rests; Humanization affects onset and velocity; Swing delays offbeat sixteenths; Variation changes scale-degree movement, chop repetition and longer progressions. Some controls have a smaller effect in chord mode, which always places a chord per bar. Settings changes do not replace notes until generation; changing settings while playing re-arms the current pattern at the host phase (or standalone beginning).
 

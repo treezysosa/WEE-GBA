@@ -414,61 +414,61 @@
     <CHORD degree="4" />
     <CHORD degree="0" />
     <CHORD degree="5" />
-    <CHORD degree="6" />
+    <CHORD degree="2" />
+    <CHORD degree="4" />
+    <CHORD degree="1" />
+    <CHORD degree="0" />
+    <CHORD degree="5" />
     <CHORD degree="4" />
     <CHORD degree="0" />
     <CHORD degree="5" />
-    <CHORD degree="2" />
-    <CHORD degree="3" />
-    <CHORD degree="3" />
-    <CHORD degree="2" />
-    <CHORD degree="1" />
     <CHORD degree="4" />
-    <NOTE beat="0" duration="3.7999999999999998" pitch="64" velocity="104" degree="1" />
-    <NOTE beat="0" duration="3.7999999999999998" pitch="67" velocity="104" degree="3" />
+    <CHORD degree="4" />
+    <NOTE beat="0" duration="3.7999999999999998" pitch="62" velocity="104" degree="0" />
+    <NOTE beat="0" duration="3.7999999999999998" pitch="65" velocity="104" degree="2" />
     <NOTE beat="0" duration="3.7999999999999998" pitch="69" velocity="104" degree="4" />
     <NOTE beat="4" duration="3.7999999999999998" pitch="71" velocity="103" degree="5" />
     <NOTE beat="4" duration="3.7999999999999998" pitch="74" velocity="104" degree="7" />
     <NOTE beat="4" duration="3.7999999999999998" pitch="77" velocity="104" degree="9" />
     <NOTE beat="8" duration="3.7999999999999998" pitch="64" velocity="104" degree="1" />
-    <NOTE beat="8" duration="3.7999999999999998" pitch="69" velocity="104" degree="4" />
+    <NOTE beat="8" duration="3.7999999999999998" pitch="67" velocity="104" degree="3" />
     <NOTE beat="8" duration="3.7999999999999998" pitch="71" velocity="104" degree="5" />
     <NOTE beat="12" duration="3.7999999999999998" pitch="69" velocity="104" degree="4" />
     <NOTE beat="12" duration="3.7999999999999998" pitch="72" velocity="104" degree="6" />
     <NOTE beat="12" duration="3.7999999999999998" pitch="76" velocity="104" degree="8" />
-    <NOTE beat="16" duration="3.7999999999999998" pitch="64" velocity="104" degree="1" />
+    <NOTE beat="16" duration="3.7999999999999998" pitch="62" velocity="104" degree="0" />
     <NOTE beat="16" duration="3.7999999999999998" pitch="65" velocity="104" degree="2" />
     <NOTE beat="16" duration="3.7999999999999998" pitch="69" velocity="103" degree="4" />
     <NOTE beat="20" duration="3.7999999999999998" pitch="71" velocity="104" degree="5" />
     <NOTE beat="20" duration="3.7999999999999998" pitch="74" velocity="105" degree="7" />
     <NOTE beat="20" duration="3.7999999999999998" pitch="77" velocity="104" degree="9" />
+    <NOTE beat="24" duration="3.7999999999999998" pitch="65" velocity="104" degree="2" />
+    <NOTE beat="24" duration="3.7999999999999998" pitch="69" velocity="104" degree="4" />
     <NOTE beat="24" duration="3.7999999999999998" pitch="72" velocity="104" degree="6" />
-    <NOTE beat="24" duration="3.7999999999999998" pitch="76" velocity="104" degree="8" />
-    <NOTE beat="24" duration="3.7999999999999998" pitch="81" velocity="104" degree="11" />
-    <NOTE beat="28" duration="3.7999999999999998" pitch="71" velocity="103" degree="5" />
+    <NOTE beat="28" duration="3.7999999999999998" pitch="69" velocity="103" degree="4" />
     <NOTE beat="28" duration="3.7999999999999998" pitch="72" velocity="104" degree="6" />
     <NOTE beat="28" duration="3.7999999999999998" pitch="76" velocity="104" degree="8" />
-    <NOTE beat="32" duration="3.7999999999999998" pitch="62" velocity="104" degree="0" />
-    <NOTE beat="32" duration="3.7999999999999998" pitch="65" velocity="104" degree="2" />
-    <NOTE beat="32" duration="3.7999999999999998" pitch="69" velocity="104" degree="4" />
-    <NOTE beat="36" duration="3.7999999999999998" pitch="71" velocity="104" degree="5" />
-    <NOTE beat="36" duration="3.7999999999999998" pitch="74" velocity="105" degree="7" />
-    <NOTE beat="36" duration="3.7999999999999998" pitch="77" velocity="104" degree="9" />
-    <NOTE beat="40" duration="3.7999999999999998" pitch="67" velocity="105" degree="3" />
-    <NOTE beat="40" duration="3.7999999999999998" pitch="69" velocity="104" degree="4" />
-    <NOTE beat="40" duration="3.7999999999999998" pitch="72" velocity="103" degree="6" />
-    <NOTE beat="44" duration="3.7999999999999998" pitch="67" velocity="104" degree="3" />
-    <NOTE beat="44" duration="3.7999999999999998" pitch="71" velocity="104" degree="5" />
-    <NOTE beat="44" duration="3.7999999999999998" pitch="74" velocity="103" degree="7" />
-    <NOTE beat="48" duration="3.7999999999999998" pitch="65" velocity="105" degree="2" />
-    <NOTE beat="48" duration="3.7999999999999998" pitch="71" velocity="104" degree="5" />
-    <NOTE beat="48" duration="3.7999999999999998" pitch="74" velocity="104" degree="7" />
-    <NOTE beat="52" duration="3.7999999999999998" pitch="65" velocity="104" degree="2" />
-    <NOTE beat="52" duration="3.7999999999999998" pitch="69" velocity="105" degree="4" />
-    <NOTE beat="52" duration="3.7999999999999998" pitch="72" velocity="104" degree="6" />
-    <NOTE beat="56" duration="3.7999999999999998" pitch="64" velocity="104" degree="1" />
-    <NOTE beat="56" duration="3.7999999999999998" pitch="67" velocity="104" degree="3" />
-    <NOTE beat="56" duration="3.7999999999999998" pitch="71" velocity="103" degree="5" />
+    <NOTE beat="32" duration="3.7999999999999998" pitch="64" velocity="104" degree="1" />
+    <NOTE beat="32" duration="3.7999999999999998" pitch="67" velocity="104" degree="3" />
+    <NOTE beat="32" duration="3.7999999999999998" pitch="71" velocity="104" degree="5" />
+    <NOTE beat="36" duration="3.7999999999999998" pitch="62" velocity="104" degree="0" />
+    <NOTE beat="36" duration="3.7999999999999998" pitch="65" velocity="105" degree="2" />
+    <NOTE beat="36" duration="3.7999999999999998" pitch="69" velocity="104" degree="4" />
+    <NOTE beat="40" duration="3.7999999999999998" pitch="71" velocity="105" degree="5" />
+    <NOTE beat="40" duration="3.7999999999999998" pitch="74" velocity="104" degree="7" />
+    <NOTE beat="40" duration="3.7999999999999998" pitch="77" velocity="103" degree="9" />
+    <NOTE beat="44" duration="3.7999999999999998" pitch="69" velocity="104" degree="4" />
+    <NOTE beat="44" duration="3.7999999999999998" pitch="72" velocity="104" degree="6" />
+    <NOTE beat="44" duration="3.7999999999999998" pitch="76" velocity="103" degree="8" />
+    <NOTE beat="48" duration="3.7999999999999998" pitch="62" velocity="105" degree="0" />
+    <NOTE beat="48" duration="3.7999999999999998" pitch="65" velocity="104" degree="2" />
+    <NOTE beat="48" duration="3.7999999999999998" pitch="69" velocity="104" degree="4" />
+    <NOTE beat="52" duration="3.7999999999999998" pitch="71" velocity="104" degree="5" />
+    <NOTE beat="52" duration="3.7999999999999998" pitch="74" velocity="105" degree="7" />
+    <NOTE beat="52" duration="3.7999999999999998" pitch="77" velocity="104" degree="9" />
+    <NOTE beat="56" duration="3.7999999999999998" pitch="69" velocity="104" degree="4" />
+    <NOTE beat="56" duration="3.7999999999999998" pitch="72" velocity="104" degree="6" />
+    <NOTE beat="56" duration="3.7999999999999998" pitch="76" velocity="103" degree="8" />
     <NOTE beat="60" duration="3.7999999999999998" pitch="69" velocity="104" degree="4" />
     <NOTE beat="60" duration="3.7999999999999998" pitch="72" velocity="105" degree="6" />
     <NOTE beat="60" duration="3.7999999999999998" pitch="76" velocity="105" degree="8" />
