@@ -8,7 +8,7 @@ enum Param : size_t {
     GrainPosition, GrainSize, GrainDensity, GrainSpray, FilterMode, Resonance,
     LFORate, LFOSync, LFOBeats, LFOShape,
     Route1Source, Route1Destination, Route1Depth, Route2Source, Route2Destination, Route2Depth,
-    Route3Source, Route3Destination, Route3Depth, Route4Source, Route4Destination, Route4Depth, paramCount
+    Route3Source, Route3Destination, Route3Depth, Route4Source, Route4Destination, Route4Depth, VocalMode, paramCount
 };
 enum class ParamType { continuous, integer, boolean, choice };
 struct ParamSpec { const char* id; const char* name; float min, max, initial; ParamType type; const char* choices = ""; float skew = 1; };
@@ -57,7 +57,8 @@ inline constexpr std::array<ParamSpec, paramCount> specs {{
     {"mod3Depth","Route 3 depth",-1,1,0,ParamType::continuous},
     {"mod4Source","Route 4 source",0,4,0,ParamType::choice,"Off|LFO|Last velocity|Mod wheel|Pressure"},
     {"mod4Destination","Route 4 destination",0,6,0,ParamType::choice,"Pitch|Cutoff|WT position|Amplitude|Pan|FM index|Grain position"},
-    {"mod4Depth","Route 4 depth",-1,1,0,ParamType::continuous}
+    {"mod4Depth","Route 4 depth",-1,1,0,ParamType::continuous},
+    {"vocalEnabled","Vocal chop / stretch playback",0,1,0,ParamType::boolean}
 }};
 struct LayerConfig {
     std::array<float, paramCount> v {};
@@ -67,6 +68,6 @@ struct LayerConfig {
     }
     Parameters envelope() const noexcept { return {v[Gain],v[Attack],v[Decay],v[Sustain],v[Release],v[Cutoff],int(v[Waveform])}; }
     SampleSettings mapping() const noexcept { return {int(v[Root]),int(v[Low]),int(v[High]),v[Start],v[End],v[Loop]>=.5f,int(v[Transpose])}; }
-    int engine() const noexcept { return v[Source]>=.5f ? 1 : (int(v[SynthMode])==0 ? 0 : int(v[SynthMode])+1); }
+    int engine() const noexcept { return v[Source]>=.5f ? (v[VocalMode]>=.5f ? 5 : 1) : (int(v[SynthMode])==0 ? 0 : int(v[SynthMode])+1); }
 };
 }

@@ -16,6 +16,11 @@ float play(WeeProcessor& p, int note = 60) {
     p.processBlock(buffer,midi);
     return buffer.getMagnitude(0,512);
 }
+class TestPlayHead final:public juce::AudioPlayHead {
+public:
+    PositionInfo position;
+    juce::Optional<PositionInfo> getPosition()const override{return position;}
+};
 int main() {
     juce::ScopedJuceInitialiser_GUI init;
     const juce::File content(WEE_TEST_CONTENT_DIR);
@@ -114,6 +119,40 @@ int main() {
     check(midiAudio.getMagnitude(0,128,128)>0.00001f,"wavetable MIDI event sounds");
     check(midiAudio.getMagnitude(0,256,256)==0,"two-byte pressure MIDI controls routed amplitude");
     auto layerTree=juce::ValueTree::fromXml(*juce::XmlDocument::parse(file));layerTree.getChildWithProperty("id","l8_pan").setProperty("value",2,nullptr);reject(layerTree);
-    original.clearSample(); waitForLoad(original); dir.deleteRecursively();
+    // Vocal laboratory assets, edited boundaries, processing state and WAV export.
+    // The preceding pressure-routing assertion deliberately muted amplitude.
+    set(restored,"mod1Depth",0);
+    auto syllables=content.getChildFile("Samples/Neon Syllables.wav");check(syllables.existsAsFile(),"synthetic vowel fixture");
+    restored.loadSample(syllables,0,true);waitForLoad(restored);check(restored.sliceMarkers().count>=4,"background transient analysis");
+    wee::SliceMap cuts;cuts.add(.25);cuts.add(.5);cuts.add(.75);check(restored.setSliceMarkers(cuts),"manual slice map accepted");waitForLoad(restored);check(restored.sliceMarkers().count==4,"manual map prepared");
+    set(restored,"vocalStretch",1.5f);set(restored,"vocalPitch",5);set(restored,"vocalFormant",3);set(restored,"vocalPreserve",1);waitForLoad(restored);
+    auto audible=[&](WeeProcessor& p,int note){p.panic();juce::AudioBuffer<float> audio(2,512);juce::MidiBuffer events;float magnitude=0;for(int i=0;i<50;++i){if(i==0)events.addEvent(juce::MidiMessage::noteOn(1,note,1.0f),0);p.processBlock(audio,events);magnitude=std::max(magnitude,audio.getMagnitude(0,512));}return magnitude;};
+    check(audible(restored,60)>.001f,"processed vocal chop audio");
+    check(restored.savePreset(file),"schema 4 edited vocal preset save");check(original.loadPreset(file),"schema 4 vocal preset load");waitForLoad(original);
+    check(original.sliceMarkers().count==4 && original.state.getRawParameterValue("vocalEnabled")->load()==1 && original.state.getRawParameterValue("vocalPitch")->load()==5,"vocal file state recall");
+    restored.getStateInformation(saved);original.setStateInformation(saved.getData(),int(saved.getSize()));waitForLoad(original);check(original.sliceMarkers().points[2]==.5,"manual markers in host state");
+    // Missing-file relocation retains manually edited slice boundaries.
+    auto recovery=juce::ValueTree::fromXml(*juce::XmlDocument::parse(file));recovery.setProperty("samplePath",dir.getChildFile("missing-syllables.wav").getFullPathName(),nullptr);recovery.removeProperty("sampleRelative",nullptr);
+    auto recoveryFile=dir.getChildFile("recover.wee");check(recoveryFile.replaceWithText(recovery.createXml()->toString()),"recovery fixture");
+    check(original.loadPreset(recoveryFile),"missing vocal preset accepted with reference");waitForLoad(original);check(original.sliceMarkers().count==1,"missing asset publishes empty content");
+    original.loadSample(syllables,0,true);waitForLoad(original);check(original.sliceMarkers().count==4,"manual boundaries survive relocation");
+    original.previewSlice(2,0);juce::AudioBuffer<float> audition(2,512);juce::MidiBuffer empty;original.processBlock(audition,empty);check(original.voiceCount.load()>=1,"queued chop preview");original.stopPreview();
+    auto rendered=dir.getChildFile("processed.wav");restored.exportVocal(rendered);
+    const auto exportDeadline=juce::Time::getMillisecondCounterHiRes()+20000;while(restored.exporting() && juce::Time::getMillisecondCounterHiRes()<exportDeadline)juce::Thread::sleep(2);
+    check(!restored.exporting() && rendered.existsAsFile(),"background processed WAV export");
+    juce::AudioFormatManager readers;readers.registerBasicFormats();std::unique_ptr<juce::AudioFormatReader> renderReader(readers.createReaderFor(rendered));
+    check(renderReader && renderReader->numChannels==2 && renderReader->bitsPerSample==24 && std::abs(double(renderReader->lengthInSamples)-132300)<3,"processed export duration/channels/format");renderReader.reset();
+    check(restored.loadPreset(content.getChildFile("Presets/Neon Chop Sequence.wee")),"chop sequence factory preset");waitForLoad(restored);
+    restored.panic();float sequenceAudio=0;for(int i=0;i<100;++i){restored.processBlock(audition,empty);sequenceAudio=std::max(sequenceAudio,audition.getMagnitude(0,512));}check(sequenceAudio>.001f,"standalone free-clock chop sequence renders without MIDI");restored.stopSequencer();
+    TestPlayHead transport;transport.position.setBpm(120);transport.position.setPpqPosition(0);transport.position.setIsPlaying(false);restored.setPlayHead(&transport);set(restored,"chopSequence",1);
+    restored.processBlock(audition,empty);check(audition.getMagnitude(0,512)==0,"host transport stop is silent");
+    transport.position.setIsPlaying(true);double hostBeat=0;float hostAudio=0;
+    for(int i=0;i<40;++i){transport.position.setPpqPosition(hostBeat);restored.processBlock(audition,empty);hostAudio=std::max(hostAudio,audition.getMagnitude(0,512));hostBeat+=512.0/48000*2;}
+    check(hostAudio>.001f,"host PPQ clock plays sequence");transport.position.setIsPlaying(false);restored.processBlock(audition,empty);check(audition.getMagnitude(0,512)==0,"host stop clears sequence voices");restored.setPlayHead(nullptr);restored.stopSequencer();
+    auto vocalTree=juce::ValueTree::fromXml(*juce::XmlDocument::parse(file));vocalTree.getChildWithName("SLICES").getChild(2).setProperty("value",-.5,nullptr);reject(vocalTree);
+    check(!restored.setSliceMarkers(wee::SliceMap{0,{}}),"invalid manual slice count rejected");
+    // Build and visit all editor pages; native mouse/DAW interaction remains manual.
+    {std::unique_ptr<juce::AudioProcessorEditor> editor(restored.createEditor());juce::ComboBox* pages=nullptr;for(int i=0;i<editor->getNumChildComponents();++i)if(auto* box=dynamic_cast<juce::ComboBox*>(editor->getChildComponent(i)))if(box->getName()=="Instrument page")pages=box;check(pages!=nullptr,"page selector exists");for(int p=1;p<=5;++p)pages->setSelectedId(p,juce::sendNotificationSync);editor->setSize(1000,800);}
+    original.clearSample();waitForLoad(original);restored.clearSample();waitForLoad(restored);dir.deleteRecursively();
     std::cout<<"State, migration, sample decoding, relocation, malformed input, replacement and codec tests passed.\n";
 }
