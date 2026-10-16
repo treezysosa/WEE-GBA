@@ -2,7 +2,7 @@
 
 An original C++20/JUCE Windows x64 VST3 and standalone instrument with a handheld-console interface. Eight layers combine virtual analog, sample playback, wavetable, two-operator FM and granular foundations. No proprietary instrument code, branded console assets, scraped recordings or voice impersonations are included.
 
-**Verification:** Phase 2 compiled on Windows and passed its three test suites in Actions run 38852200800. Phase 3's portable DSP/routing tests pass locally; its Windows build and extended integration checks are the next gate. Consult this revision's Actions checks. Actual FL Studio playback, human listening, GUI interaction and pluginval remain unverified.
+**Verification:** Phase 3 Windows x64 VST3/standalone compilation and all four test suites passed in Actions run 38854097991. The subsequent host-tail adjustment has a local regression test; consult this revision’s Actions checks for its Windows result. Actual FL Studio playback, human listening, GUI interaction and pluginval remain unverified.
 
 ## Build on Windows
 
@@ -40,7 +40,7 @@ Enable layers with switches **1–8** above the display. Only layer 1 is enabled
 - **MODULATION:** one free-running LFO per layer, with sine/triangle/square, Hz or tempo-linked beat divisions. Four routes connect LFO, last accepted velocity, mod wheel (CC1) or pressure to pitch, cutoff, WT position, amplitude, pan, FM index or grain position. Set source, destination and a signed depth; Off is neutral. Engine-specific destinations act only on their respective engines. Pressure is a global expression signal, not per-voice MPE.
 - **LAYER MIXER:** all eight levels and balances plus a smoothed global master level. Disabled layers can be edited before enabling them. Lower layer levels if stacked notes reach the output clamp.
 
-The display reports host BPM (120 fallback), total/selected-layer voices, approximate callback CPU load and last-block peak. LFO tempo sync sets cycle speed; it does not align phase to host song position. Pitch bend is ±2 semitones; CC64 sustains notes. A source/engine change or layer disable stops that layer's current voices. Changes to transpose still release correctly using the original MIDI key.
+The plugin reports a 6.25-second release/filter tail to the host. The display reports host BPM (120 fallback), total/selected-layer voices, approximate callback CPU load and last-block peak. LFO tempo sync sets cycle speed; it does not align phase to host song position. Pitch bend is ±2 semitones; CC64 sustains notes. A source/engine change or layer disable stops that layer's current voices. Changes to transpose still release correctly using the original MIDI key.
 
 ## Presets and samples
 

@@ -16,7 +16,7 @@ public:
     const juce::String getName() const override { return "WEE"; }
     bool acceptsMidi() const override { return true; }
     bool producesMidi() const override { return false; }
-    double getTailLengthSeconds() const override { return 5; }
+    double getTailLengthSeconds() const override { return 6.25; }
     int getNumPrograms() override { return 1; }
     int getCurrentProgram() override { return 0; }
     void setCurrentProgram(int) override {}

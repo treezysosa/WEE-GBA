@@ -82,6 +82,13 @@ int main(){
         check(type==1 ? total>rate*.5 : total<rate*.00001,"multimode DC response");
         for(int i=0;i<5000;++i){filter.configure(type,i%2?20:20000,.95f,rate);check(std::isfinite(filter.process(i%2?.5f:-.5f,0)),"filter stable under modulation");}
     }
+    // Maximum release plus resonant filter decay must fit the declared host tail.
+    c=configs();c[0].v[wee::SynthMode]=1;c[0].v[wee::Sustain]=1;c[0].v[wee::Release]=5;
+    c[0].v[wee::FilterMode]=1;c[0].v[wee::Cutoff]=20;c[0].v[wee::Resonance]=.95f;
+    rack->prepare(48000);rack->configure(c,1,120);rack->noteOn(16,1);render(*rack,left,right,128);rack->noteOff(16);
+    std::vector<float> tail(300000,0),tailR(300000,0);render(*rack,tail,tailR,128);
+    float lastPeak=0;for(size_t i=tail.size()-4096;i<tail.size();++i)lastPeak=std::max(lastPeak,std::abs(tail[i]));
+    check(rack->activeVoices()==0 && lastPeak<.00001f,"max release and resonant decay fit 6.25-second tail");
     check(allocations==0,"no hybrid audio-side allocations");
     std::cout<<"Hybrid tests passed: 75 engine/rate/buffer combinations, tuning, mipmaps, FM, granular, 8 layers, routing, filters, sync and allocation guard.\n";
 }
