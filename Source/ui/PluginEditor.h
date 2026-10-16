@@ -1,9 +1,11 @@
 #pragma once
 #include "PluginProcessor.h"
+#include "VocalWaveform.h"
 class WeeParameterControl final : public juce::Component {
 public:
     WeeParameterControl(WeeProcessor&,size_t layer,size_t parameter,const juce::String& name = {});
     WeeParameterControl(WeeProcessor&,const juce::String& id,const juce::String& name);
+    WeeParameterControl(WeeProcessor&,const wee::ParamSpec&);
     void resized() override;
     void refresh();
 private:
@@ -30,6 +32,8 @@ private:
     void timerCallback() override;
     void choosePreset(bool save);
     void chooseSample();
+    void chooseExport(bool slice);
+    void updateSliceSelection();
     void rebuildPage();
     void arrangeControls();
     WeeProcessor& processor;
@@ -45,6 +49,11 @@ private:
     juce::TextButton previous {"< LAYER"},next {"LAYER >"};
     juce::TextButton sampleLoad {"LOAD SAMPLE / RELOCATE"},sampleClear {"CLEAR SHARED SAMPLE"};
     juce::Label status,sampleInfo,hint;
+    VocalWaveform sliceWave;
+    juce::ComboBox sliceChoice;
+    juce::Slider sliceStart,sliceEnd;
+    juce::TextButton useVocal {"USE VOCAL LAYER"},detect {"DETECT"},split {"SPLIT"},remove {"REMOVE"},preview {"PREVIEW"},stop {"STOP"},exportClip {"EXPORT CLIP"},exportChop {"EXPORT CHOP"};
+    bool updatingSlices=false,draggingBoundary=false;
     std::vector<float> waveform;
     uint64_t revision=0;
     size_t selectedLayer=0;

@@ -1,5 +1,15 @@
 # Presets and sample content
 
+## Schema 4 vocal document
+
+Current schema 4 adds `vocalEnabled` to each layer (46 controls per layer), 31 shared vocal/sequence controls in Source/vocal/VocalConfig.h and masterGain: 400 PARAM children total. Exactly one SLICES child follows, with `manual="0"` or `"1"` and 2–33 POINT children carrying normalized `value` numbers. Endpoints must be exactly 0 and 1; points must be finite, ascending and at least 0.000001 apart. The 401-child tree is validated before loading/saving. Schemas 1/2 still migrate to layer 1, schema 3 retains all eight layers; new vocal controls default off and old choice normalization is retained.
+
+Automatic slices are recalculated from original audio and stored sensitivity. Manual markers override detection and persist on reload/missing-file recovery. The formant target is formant shift minus fixed Vocal pitch when compensation is enabled; that prepared buffer is separate from unchanged original sample/granular audio. All vocal layers share this processing and slice document. The audio-thread-only source generation ID is not a persistent file identifier; preset paths still use the prior relative/absolute recovery rules.
+
+Manifest content now includes three CC0 synthetic recordings, adding Neon Syllables: an original integer-resonator robotic-vowel texture with no human performance, linguistic content or assigned region. New schema-4 presets are Neon Chop Grid, Neon Chop Sequence and Neon Stretch Pad. WAV generation and hash/format/provenance checks run in CI. Synthetic demos are not a completed vocal library.
+
+
+
 ## Schema 3
 
 The `.wee` root is `WEE schema="3"`, with 361 `PARAM` children: 45 controls per layer × 8, plus `masterGain`. Each parameter ID must occur exactly once. Layer 1 keeps its original IDs; layers 2–8 use prefixes `l2_` … `l8_`. `Source` retains actual values 0 synth and 1 sample, preserving old choice normalization. `synthMode` selects VA=0, wavetable=1, FM=2 or granular=3 when source=0. Definitions/ranges/defaults are centralized in Source/dsp/LayerConfig.h.
@@ -16,7 +26,7 @@ Each layer has independent root/trim/key range, but there are no separate sample
 
 ## Demo provenance
 
-Content/manifest.json records two original CC0 synthetic stereo samples generated reproducibly by scripts/generate-demo.py. CI verifies SHA-256, format and provenance. WAVs are build/package artifacts, not checked-in binaries. They contain no voices or third-party recordings. See Samples/LICENSE.txt. Four original Phase 3 synthesis/hybrid presets reuse these assets only where necessary; they are MIT-licensed parameter settings.
+Content/manifest.json records three original CC0 synthetic stereo samples generated reproducibly by scripts/generate-demo.py. CI verifies SHA-256, format and provenance. WAVs are build/package artifacts, not checked-in binaries. They contain no voices or third-party recordings. See Samples/LICENSE.txt. Four original Phase 3 synthesis/hybrid presets reuse these assets only where necessary; they are MIT-licensed parameter settings.
 
 The loader handles WAV/AIFF/FLAC, mono/stereo 8–192 kHz, at most 120 seconds and 128 MiB decoded per asset. Failure publishes empty content and clears the preview. Native file browsing and MIDI audition are available; metadata indexing, library rescan, favorites and a commercial vocal collection remain unfinished.
 

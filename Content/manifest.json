@@ -41,7 +41,27 @@
         "demo",
         "glass"
       ]
+    },
+    {
+      "id": "wee-demo-syllables",
+      "path": "Samples/Neon Syllables.wav",
+      "sha256": "cf7868bf477d8dd0eeca8f27816e8cfe81bdb64292f5eae824bcf289d083223d",
+      "creator": "WEE procedural demo generator",
+      "source": "scripts/generate-demo.py; original integer oscillator synthesis",
+      "license": "CC0-1.0",
+      "usageRights": "Use, modify, redistribute, and use in musical works without attribution.",
+      "languageBCP47": "zxx",
+      "region": null,
+      "recordingConsent": "Not applicable: synthesized; no human recording.",
+      "rootMidi": 48,
+      "sampleRate": 44100,
+      "channels": 2,
+      "tags": [
+        "synthetic",
+        "demo",
+        "syllables"
+      ]
     }
   ],
-  "notice": "Two original synthetic demo sounds only. No vocal recordings or commercial sample collection."
+  "notice": "Three original synthetic demo sounds only, including robotic vowel textures. No vocal recordings or commercial sample collection."
 }

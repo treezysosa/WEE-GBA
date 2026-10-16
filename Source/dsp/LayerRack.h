@@ -1,6 +1,7 @@
 #pragma once
 #include "HybridSynth.h"
 #include "Modulation.h"
+#include "vocal/VocalEngine.h"
 namespace wee {
 class LayerRack {
     struct Layer {
@@ -8,17 +9,20 @@ class LayerRack {
         Engine analog;
         Sampler sampler;
         HybridSynth hybrid;
+        VocalEngine vocal;
         StereoFilter filter;
         LFO lfo;
         float velocity=0;
         int previousEngine=-1;
         bool wasEnabled=false;
         void stop(bool immediate) noexcept {
-            analog.allNotesOff(immediate); sampler.allNotesOff(immediate); hybrid.allNotesOff(immediate);
+            analog.allNotesOff(immediate); sampler.allNotesOff(immediate); hybrid.allNotesOff(immediate); vocal.allNotesOff(immediate);
             if(immediate) filter.reset();
         }
     };
     WavetableBank tables;
+    VocalConfig vocalConfig;
+    uint64_t sourceGeneration=0;
     std::array<Layer,layerCount> layers;
     double rate=44100,tempo=120;
     float wheel=0,pressure=0,master=1,currentMaster=1;
@@ -28,13 +32,15 @@ public:
     LayerRack() { for(size_t i=0;i<layerCount;++i) layers[i].config=LayerConfig(i); }
     void prepare(double sr) {
         rate=std::max(8000.0,sr); tables.prepare(); wheel=pressure=0; bendValue=8192;pedal=false;currentMaster=master;
-        for(auto& l:layers) {l.analog.prepare(rate);l.sampler.prepare(rate);l.hybrid.prepare(rate,tables);l.filter.reset();l.lfo.reset();l.previousEngine=-1;l.wasEnabled=false;}
+        for(auto& l:layers) {l.analog.prepare(rate);l.sampler.prepare(rate);l.hybrid.prepare(rate,tables);l.vocal.prepare(rate,tables);l.filter.reset();l.lfo.reset();l.previousEngine=-1;l.wasEnabled=false;}
     }
     void setSample(const SampleData* sample) noexcept {
+        const bool same=sample && sample->sourceGeneration>0 && sample->sourceGeneration==sourceGeneration;
+        sourceGeneration=sample?sample->sourceGeneration:0;
         for(auto& l:layers) {
-            l.sampler.setSample(sample);l.hybrid.setSample(sample,l.config.engine()==4);
-            l.sampler.pitchWheel(bendValue);l.hybrid.pitchWheel(bendValue);
-            l.sampler.sustainPedal(pedal);l.hybrid.sustainPedal(pedal);
+            l.sampler.setSample(sample,!same);l.hybrid.setSample(sample,!same && l.config.engine()==4);l.vocal.setSample(sample);
+            l.sampler.pitchWheel(bendValue);l.hybrid.pitchWheel(bendValue);l.vocal.pitchWheel(bendValue);
+            l.sampler.sustainPedal(pedal);l.hybrid.sustainPedal(pedal);l.vocal.sustainPedal(pedal);
         }
     }
     void configure(const std::array<LayerConfig,layerCount>& settings,float masterGain,double bpm) noexcept {
@@ -43,13 +49,13 @@ public:
             auto& l=layers[i]; const bool enabled=settings[i].v[Enabled]>=.5f;
             if(l.previousEngine!=settings[i].engine() || l.wasEnabled!=enabled) {
                 l.stop(true);
-                l.analog.pitchWheel(bendValue);l.sampler.pitchWheel(bendValue);l.hybrid.pitchWheel(bendValue);
-                l.analog.sustainPedal(pedal);l.sampler.sustainPedal(pedal);l.hybrid.sustainPedal(pedal);
+                l.analog.pitchWheel(bendValue);l.sampler.pitchWheel(bendValue);l.hybrid.pitchWheel(bendValue);l.vocal.pitchWheel(bendValue);
+                l.analog.sustainPedal(pedal);l.sampler.sustainPedal(pedal);l.hybrid.sustainPedal(pedal);l.vocal.sustainPedal(pedal);
             }
             l.config=settings[i];l.previousEngine=settings[i].engine();l.wasEnabled=enabled;
         }
     }
-    void noteOn(int note,float velocity,bool sampleReady=true) noexcept {
+    void noteOn(int note,float velocity,bool sampleReady=true,bool vocalReady=true) noexcept {
         if(velocity<=0) {noteOff(note);return;}
         for(auto& l:layers) {
             const auto& c=l.config;
@@ -60,16 +66,22 @@ public:
                 case 1:if(sampleReady) l.sampler.noteOn(note,velocity,c.mapping());break;
                 case 2:case 3:l.hybrid.noteOn(note,velocity,c);break;
                 case 4:if(sampleReady) l.hybrid.noteOn(note,velocity,c);break;
+                case 5:if(vocalReady) l.vocal.noteOn(note,velocity,c,vocalConfig);break;
             }
         }
     }
-    void noteOff(int note) noexcept {for(auto& l:layers){l.analog.noteOff(note);l.sampler.noteOff(note);l.hybrid.noteOff(note);}}
+    void noteOff(int note) noexcept {for(auto& l:layers){l.analog.noteOff(note);l.sampler.noteOff(note);l.hybrid.noteOff(note);l.vocal.noteOff(note);}}
     void allNotesOff(bool immediate=false) noexcept {pedal=false;for(auto& l:layers) l.stop(immediate);}
-    void pitchWheel(int value) noexcept {bendValue=value;for(auto& l:layers){l.analog.pitchWheel(value);l.sampler.pitchWheel(value);l.hybrid.pitchWheel(value);}}
-    void sustainPedal(bool down) noexcept {pedal=down;for(auto& l:layers){l.analog.sustainPedal(down);l.sampler.sustainPedal(down);l.hybrid.sustainPedal(down);}}
+    void pitchWheel(int value) noexcept {bendValue=value;for(auto& l:layers){l.analog.pitchWheel(value);l.sampler.pitchWheel(value);l.hybrid.pitchWheel(value);l.vocal.pitchWheel(value);}}
+    void sustainPedal(bool down) noexcept {pedal=down;for(auto& l:layers){l.analog.sustainPedal(down);l.sampler.sustainPedal(down);l.hybrid.sustainPedal(down);l.vocal.sustainPedal(down);}}
+    void configureVocal(const VocalConfig& c)noexcept{vocalConfig=c;}
+    void stopVocalLane(int lane)noexcept{for(auto& l:layers)l.vocal.stopLane(lane);}
+    void sequenceOn(int note,float velocity,bool ready)noexcept{if(!ready)return;for(auto& l:layers)if(l.config.v[Enabled]>=.5f && l.config.engine()==5){l.velocity=velocity;l.vocal.noteOn(note,velocity,l.config,vocalConfig,1,note-int(vocalConfig.v[VBase]));}}
+    void sequenceOff(int note)noexcept{for(auto& l:layers)l.vocal.noteOff(note,1);}
+    void previewSlice(int slice,size_t layer,bool ready)noexcept{stopVocalLane(2);if(ready && layer<layerCount){auto& l=layers[layer];if(l.config.v[Enabled]>=.5f && l.config.engine()==5)l.vocal.noteOn(int(vocalConfig.v[VBase])+slice,1,l.config,vocalConfig,2,slice);}}
     void modWheel(float value) noexcept {wheel=std::clamp(value,0.0f,1.0f);}
     void aftertouch(float value) noexcept {pressure=std::clamp(value,0.0f,1.0f);}
-    int activeVoices(size_t layer) const noexcept { const auto& l=layers[layer];return l.analog.activeVoices()+l.sampler.activeVoices()+l.hybrid.activeVoices(); }
+    int activeVoices(size_t layer) const noexcept { const auto& l=layers[layer];return l.analog.activeVoices()+l.sampler.activeVoices()+l.hybrid.activeVoices()+l.vocal.activeVoices(); }
     int activeVoices() const noexcept {int n=0;for(size_t i=0;i<layerCount;++i)n+=activeVoices(i);return n;}
     void render(float* left,float* right,int count) noexcept {
         const float smooth=1-std::exp(float(-1/(rate*.005)));
@@ -84,6 +96,7 @@ public:
                 std::array<float,16> a{},b{};
                 if(c.engine()==0) {l.analog.pitchMultiplier(pitch);l.analog.render(a.data(),b.data(),n,p);}
                 else if(c.engine()==1) {l.sampler.pitchMultiplier(pitch);l.sampler.render(a.data(),b.data(),n,p);}
+                else if(c.engine()==5)l.vocal.render(a.data(),b.data(),n,p,vocalConfig,tempo,m.pitch);
                 else l.hybrid.render(a.data(),b.data(),n,p,c,m.pitch,std::clamp(c.v[WTPosition]+m.wt,0.0f,1.0f),std::clamp(c.v[FMIndex]+m.fm,0.0f,8.0f),std::clamp(c.v[GrainPosition]+m.grain,0.0f,1.0f));
                 l.filter.configure(int(c.v[FilterMode]),p.cutoff,c.v[Resonance],rate);
                 const float pan=std::clamp(c.v[Pan]+m.pan,-1.0f,1.0f), amplitude=std::clamp(1+m.amplitude,0.0f,2.0f);

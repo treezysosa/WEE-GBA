@@ -1,12 +1,15 @@
 #pragma once
 #include "Engine.h"
+#include "vocal/SliceMap.h"
 #include <vector>
 namespace wee {
 // Immutable after publication. Only the loader thread allocates/frees these buffers.
 struct SampleData {
     std::vector<float> left, right;
     double rate = 44100;
-    uint64_t generation = 0;
+    uint64_t generation = 0, sourceGeneration = 0;
+    SliceMap slices;
+    std::vector<float> vocalLeft, vocalRight;
     bool valid() const noexcept { return left.size() >= 2 && left.size() == right.size() && rate > 0; }
 };
 struct SampleSettings {
@@ -32,7 +35,7 @@ class Sampler {
 public:
     void prepare(double sr) noexcept { rate = std::max(8000.0, sr); reset(); }
     void reset() noexcept { voices = {}; bend = 1; modulationPitch = 1; pedal = false; gain = 0; age = 0; }
-    void setSample(const SampleData* asset) noexcept { reset(); sample = asset; }
+    void setSample(const SampleData* asset, bool stopVoices=true) noexcept { if(stopVoices) reset(); sample = asset; }
     void pitchWheel(int wheel) noexcept { bend = std::pow(2.0, (wheel - 8192) / 8192.0 * 2.0 / 12.0); }
     void sustainPedal(bool down) noexcept {
         pedal = down;
