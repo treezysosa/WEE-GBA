@@ -1,6 +1,7 @@
 #pragma once
 #include <juce_audio_utils/juce_audio_utils.h>
 #include "dsp/Engine.h"
+#include "sampling/SampleLoader.h"
 class WeeProcessor final : public juce::AudioProcessor, private juce::MidiKeyboardStateListener {
 public:
     WeeProcessor();
@@ -25,6 +26,12 @@ public:
     void setStateInformation(const void*, int) override;
     bool loadPreset(const juce::File&);
     bool savePreset(const juce::File&);
+    void loadSample(const juce::File&);
+    void clearSample();
+    juce::String sampleStatus() const { return loader.status(); }
+    std::vector<float> sampleWaveform() const { return loader.waveform(); }
+    bool sampleLoading() const { return loader.loading.load(); }
+    uint64_t sampleRevision() const { return loader.completed.load(); }
     juce::AudioProcessorValueTreeState state;
     juce::MidiKeyboardState keyboard;
     std::atomic<float> peak {0}, cpu {0};
@@ -38,8 +45,14 @@ private:
     juce::AbstractFifo keyQueue {256};
     std::atomic<bool> panicRequested {false};
     static juce::AudioProcessorValueTreeState::ParameterLayout layout();
+    bool applyPatch(juce::ValueTree, const juce::File& base = {});
+    juce::ValueTree patchState();
+    juce::CriticalSection contentStateMutex; // Never acquired by processBlock.
     wee::Engine engine;
-    std::array<std::atomic<float>*, 7> values;
+    wee::Sampler sampler;
+    wee::SampleLoader loader;
+    int previousSource = 0;
+    std::array<std::atomic<float>*, 14> values;
     double rate = 44100;
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(WeeProcessor)
 };

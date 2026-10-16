@@ -1,7 +1,47 @@
 {
   "schemaVersion": 1,
   "product": "WEE",
-  "samples": [],
-  "notice": "Phase 1 contains synthesis presets only. No vocal recordings, sample library, or third-party audio is bundled.",
-  "requiredFutureSampleFields": ["id", "path", "sha256", "creator", "source", "license", "usageRights", "languageBCP47", "region", "recordingConsent", "tags"]
+  "samples": [
+    {
+      "id": "wee-demo-reed",
+      "path": "Samples/Pocket Reed.wav",
+      "sha256": "96de0291043b39f6287f1d54299be475a376c7084865b3e53d2d709274201af5",
+      "creator": "WEE procedural demo generator",
+      "source": "scripts/generate-demo.py; original integer oscillator synthesis",
+      "license": "CC0-1.0",
+      "usageRights": "Use, modify, redistribute, and use in musical works without attribution.",
+      "languageBCP47": "zxx",
+      "region": null,
+      "recordingConsent": "Not applicable: synthesized; no human recording.",
+      "rootMidi": 60,
+      "sampleRate": 44100,
+      "channels": 2,
+      "tags": [
+        "synthetic",
+        "demo",
+        "reed"
+      ]
+    },
+    {
+      "id": "wee-demo-glass",
+      "path": "Samples/Glass Cartridge.wav",
+      "sha256": "0a815a4f6c78f1ff5ee73b331c2fe4c9deda99a8ae4bd3db0756c9a856456508",
+      "creator": "WEE procedural demo generator",
+      "source": "scripts/generate-demo.py; original integer oscillator synthesis",
+      "license": "CC0-1.0",
+      "usageRights": "Use, modify, redistribute, and use in musical works without attribution.",
+      "languageBCP47": "zxx",
+      "region": null,
+      "recordingConsent": "Not applicable: synthesized; no human recording.",
+      "rootMidi": 60,
+      "sampleRate": 44100,
+      "channels": 2,
+      "tags": [
+        "synthetic",
+        "demo",
+        "glass"
+      ]
+    }
+  ],
+  "notice": "Two original synthetic demo sounds only. No vocal recordings or commercial sample collection."
 }

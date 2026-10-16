@@ -1,0 +1,17 @@
+<?xml version="1.0"?>
+<WEE schema="2" sampleRelative="../Samples/Glass Cartridge.wav" samplePath="">
+  <PARAM id="gain" value="0.5"/>
+  <PARAM id="attack" value="0.005"/>
+  <PARAM id="decay" value="0.2"/>
+  <PARAM id="sustain" value="0.8"/>
+  <PARAM id="release" value="0.35"/>
+  <PARAM id="cutoff" value="12000"/>
+  <PARAM id="waveform" value="0"/>
+  <PARAM id="source" value="1"/>
+  <PARAM id="root" value="60"/>
+  <PARAM id="sampleStart" value="0"/>
+  <PARAM id="sampleEnd" value="1"/>
+  <PARAM id="loop" value="0"/>
+  <PARAM id="keyLow" value="0"/>
+  <PARAM id="keyHigh" value="127"/>
+</WEE>
