@@ -13,6 +13,7 @@ struct SampleSettings {
     int root = 60, low = 0, high = 127;
     float start = 0, end = 1;
     bool loop = false;
+    int transpose = 0;
 };
 class Sampler {
     struct Voice {
@@ -24,13 +25,13 @@ class Sampler {
     };
     std::array<Voice, 32> voices {};
     const SampleData* sample = nullptr;
-    double rate = 44100, bend = 1;
+    double rate = 44100, bend = 1, modulationPitch = 1;
     bool pedal = false;
     uint64_t age = 0;
     float gain = 0;
 public:
     void prepare(double sr) noexcept { rate = std::max(8000.0, sr); reset(); }
-    void reset() noexcept { voices = {}; bend = 1; pedal = false; gain = 0; age = 0; }
+    void reset() noexcept { voices = {}; bend = 1; modulationPitch = 1; pedal = false; gain = 0; age = 0; }
     void setSample(const SampleData* asset) noexcept { reset(); sample = asset; }
     void pitchWheel(int wheel) noexcept { bend = std::pow(2.0, (wheel - 8192) / 8192.0 * 2.0 / 12.0); }
     void sustainPedal(bool down) noexcept {
@@ -50,7 +51,7 @@ public:
         *target = {}; target->note = note; target->stage = 1; target->held = true;
         target->velocity = std::clamp(velocity, 0.0f, 1.0f); target->age = ++age;
         target->position = target->begin = first; target->end = last; target->loop = s.loop;
-        target->increment = sample->rate / rate * std::pow(2.0, (note - s.root) / 12.0);
+        target->increment = sample->rate / rate * std::pow(2.0, (note + s.transpose - s.root) / 12.0);
     }
     void noteOff(int note) noexcept {
         for (auto& v : voices) if (v.note == note && v.held) { v.held = false; v.sustained = pedal; if (!pedal) v.stage = 4; }
@@ -59,6 +60,7 @@ public:
         pedal = false;
         for (auto& v : voices) { v.held = v.sustained = false; v.stage = immediate ? 0 : 4; }
     }
+    void pitchMultiplier(double multiplier) noexcept { modulationPitch = multiplier; }
     int activeVoices() const noexcept { int n = 0; for (const auto& v : voices) n += v.stage != 0; return n; }
     void render(float* left, float* right, int count, const Parameters& p) noexcept {
         if (!sample || !sample->valid()) return;
@@ -83,13 +85,13 @@ public:
                 const float fraction = float(v.position - double(index));
                 const auto next = double(index + 1) < v.end ? index + 1 : (v.loop ? size_t(v.begin) : index);
                 auto read = [&](const std::vector<float>& data) { return data[index] + fraction * (data[next] - data[index]); };
-                v.filterL += fc * (read(sample->left) - v.filterL);
-                v.filterR += fc * (read(sample->right) - v.filterR);
+                if (p.bypassTone) { v.filterL = read(sample->left); v.filterR = read(sample->right); }
+                else { v.filterL += fc * (read(sample->left) - v.filterL); v.filterR += fc * (read(sample->right) - v.filterR); }
                 // Short boundary fades reduce one-shot trim clicks. Loops use raw boundaries.
                 const float edge = v.loop ? 1.0f : float(std::clamp(std::min(v.position - v.begin, v.end - v.position) / std::max(1.0, sample->rate * 0.002), 0.0, 1.0));
                 const float amplitude = v.envelope * v.velocity * edge;
                 sumL += v.filterL * amplitude; sumR += v.filterR * amplitude;
-                v.position += v.increment * bend;
+                v.position += v.increment * bend * modulationPitch;
             }
             gain += smooth * (p.gain - gain);
             if (right) { left[i] += std::tanh(sumL * gain * 0.5f); right[i] += std::tanh(sumR * gain * 0.5f); }

@@ -19,10 +19,10 @@ float play(WeeProcessor& p, int note = 60) {
 int main() {
     juce::ScopedJuceInitialiser_GUI init;
     const juce::File content(WEE_TEST_CONTENT_DIR);
-    WeeProcessor original; original.prepareToPlay(48000,512);
+    auto originalOwner=std::make_unique<WeeProcessor>(); auto& original=*originalOwner; original.prepareToPlay(48000,512);
     set(original,"gain",0.67f);
     juce::MemoryBlock saved; original.getStateInformation(saved);
-    WeeProcessor restored; restored.prepareToPlay(48000,512); restored.setStateInformation(saved.getData(),int(saved.getSize()));
+    auto restoredOwner=std::make_unique<WeeProcessor>(); auto& restored=*restoredOwner; restored.prepareToPlay(48000,512); restored.setStateInformation(saved.getData(),int(saved.getSize()));
     check(std::abs(restored.state.getRawParameterValue("gain")->load()-0.67f)<0.0001f,"host state round trip");
     const char invalid[]="invalid"; restored.setStateInformation(invalid,sizeof invalid);
     check(std::abs(restored.state.getRawParameterValue("gain")->load()-0.67f)<0.0001f,"invalid binary leaves state intact");
@@ -30,10 +30,14 @@ int main() {
     check(dir.createDirectory().wasOk(),"create temporary directory");
     auto file=dir.getChildFile("patch.wee");
     check(original.savePreset(file) && restored.loadPreset(file),"preset round trip");
+    set(restored,"l8_enabled",1);set(restored,"l8_synthMode",2);
     // Old Phase 1 preset explicitly migrates added parameters to defaults.
     set(restored,"source",1); set(restored,"root",72);
     check(restored.loadPreset(content.getChildFile("Presets/Soft Orbit.wee")),"schema 1 migration");
     check(restored.state.getRawParameterValue("source")->load()==0 && restored.state.getRawParameterValue("root")->load()==60,"migration defaults");
+    check(restored.state.getRawParameterValue("l8_enabled")->load()==0,"migration disables added layers");
+    check(restored.loadPreset(content.getChildFile("Presets/Pocket Reed.wee")),"schema 2 migration");waitForLoad(restored);
+    check(restored.state.getRawParameterValue("source")->load()==1 && restored.state.getRawParameterValue("synthMode")->load()==0,"schema 2 source retained");
     check(!restored.loadPreset(content.getChildFile("not-present.wee")),"missing preset rejected");
     const auto sample=content.getChildFile("Samples/Pocket Reed.wav"); check(sample.existsAsFile(),"generate demo samples before state tests");
     original.loadSample(sample); waitForLoad(original);
@@ -89,6 +93,27 @@ int main() {
         restored.loadSample(encoded); waitForLoad(restored); check(play(restored)>0.001f,"mono AIFF/FLAC playback");
     }
     restored.clearSample(); waitForLoad(restored); check(play(restored)==0,"clear sample");
+    // Hybrid presets, 8-layer recall, automation and short pressure MIDI messages.
+    check(restored.loadPreset(content.getChildFile("Presets/Eightfold Nebula.wee")),"eight-layer preset");waitForLoad(restored);
+    check(play(restored)>0.001f && restored.voiceCount.load()==8,"all eight layers audible/active");
+    check(restored.savePreset(file),"schema 3 file save");
+    check(original.loadPreset(file),"schema 3 multilayer recall");waitForLoad(original);
+    check(original.state.getRawParameterValue("l8_enabled")->load()==1 && original.state.getRawParameterValue("l8_transpose")->load()==19,"layer 8 settings recalled");
+    original.getStateInformation(saved);restored.setStateInformation(saved.getData(),int(saved.getSize()));waitForLoad(restored);
+    check(play(restored)>0.001f && restored.layerVoices[7].load()==1,"host restores layer 8");
+    check(restored.loadPreset(content.getChildFile("Presets/Grain Lantern.wee")),"granular hybrid preset");waitForLoad(restored);play(restored);
+    check(restored.voiceCount.load()==2,"granular and wavetable layering");
+    check(restored.loadPreset(content.getChildFile("Presets/Prism Pocket.wee")),"wavetable preset");waitForLoad(restored);
+    set(restored,"mod1Source",4);set(restored,"mod1Destination",3);set(restored,"mod1Depth",-1);
+    restored.panic();
+    juce::AudioBuffer<float> midiAudio(2,512);juce::MidiBuffer midi;
+    midi.addEvent(juce::MidiMessage::noteOn(1,60,1.0f),128);
+    midi.addEvent(juce::MidiMessage::channelPressureChange(1,127),256);
+    restored.processBlock(midiAudio,midi);
+    check(midiAudio.getMagnitude(0,0,128)==0,"sample-positioned note begins after offset");
+    check(midiAudio.getMagnitude(0,128,128)>0.00001f,"wavetable MIDI event sounds");
+    check(midiAudio.getMagnitude(0,256,256)==0,"two-byte pressure MIDI controls routed amplitude");
+    auto layerTree=juce::ValueTree::fromXml(*juce::XmlDocument::parse(file));layerTree.getChildWithProperty("id","l8_pan").setProperty("value",2,nullptr);reject(layerTree);
     original.clearSample(); waitForLoad(original); dir.deleteRecursively();
     std::cout<<"State, migration, sample decoding, relocation, malformed input, replacement and codec tests passed.\n";
 }

@@ -1,25 +1,23 @@
-# WEE — Phase 2 sampler (0.2.0)
+# WEE — Phase 3 hybrid instrument (0.3.0)
 
-A real C++20/JUCE synthesizer source project targeting Windows x64 VST3 and standalone. Original handheld-console styling; no Nintendo assets, proprietary instrument code, or sampled recordings.
+An original C++20/JUCE Windows x64 VST3 and standalone instrument with a handheld-console interface. Eight layers combine virtual analog, sample playback, wavetable, two-operator FM and granular foundations. No proprietary instrument code, branded console assets, scraped recordings or voice impersonations are included.
 
-**Status:** Phase 1 VST3/standalone compiled on Windows and passed DSP/state tests. Phase 2 adds sampling; the Windows x64 VST3/standalone build and all three DSP, sampler and integration test suites passed in GitHub Actions run 38851631923. Consult the latest PR checks for subsequent revisions. FL Studio playback remains unverified. This is an incremental instrument, not the complete flagship specification.
+**Verification:** Phase 2 compiled on Windows and passed its three test suites in Actions run 38852200800. Phase 3's portable DSP/routing tests pass locally; its Windows build and extended integration checks are the next gate. Consult this revision's Actions checks. Actual FL Studio playback, human listening, GUI interaction and pluginval remain unverified.
 
 ## Build on Windows
 
-Install Visual Studio 2022 with **Desktop development with C++**, MSVC v143, and Windows 10/11 SDK. Install CMake 3.22+, Git, and Python 3 and place them on PATH. Use Windows x64. JUCE 8.0.6 is fetched by CMake; for offline builds supply a local checkout with `-JucePath`.
-
-From PowerShell:
+Install Visual Studio 2022 with **Desktop development with C++**, MSVC v143 and Windows 10/11 SDK. Install CMake 3.22+, Git and Python 3 on PATH. The build targets x64 and pins JUCE 8.0.6. JUCE can be downloaded by CMake or supplied as a local checkout for offline builds.
 
 ```powershell
 ./scripts/build-windows.ps1 -Configuration Debug
 ./scripts/build-windows.ps1 -Configuration Release
-# Optional install, from an elevated PowerShell if required:
+# Optional install; use an elevated PowerShell if permissions require it:
 ./scripts/build-windows.ps1 -Configuration Release -Install
-# Offline dependency source:
+# Local JUCE checkout:
 ./scripts/build-windows.ps1 -JucePath C:/Dependencies/JUCE
 ```
 
-Equivalent commands:
+Equivalent manual commands:
 
 ```powershell
 python scripts/generate-demo.py
@@ -29,52 +27,52 @@ cmake --build build/windows --config Release --parallel 2
 ctest --test-dir build/windows -C Release --output-on-failure
 ```
 
-Outputs are `build/windows/WEE_artefacts/Release/VST3/WEE.vst3` (a directory bundle) and `build/windows/WEE_artefacts/Release/Standalone/WEE.exe`. Install the **whole** VST3 bundle into `C:/Program Files/Common Files/VST3/`. Close hosts before overwriting. Installation is optional; the build does not alter system folders.
+Outputs: `build/windows/WEE_artefacts/Release/VST3/WEE.vst3` (a directory bundle) and `build/windows/WEE_artefacts/Release/Standalone/WEE.exe`. Copy the **whole** VST3 directory into `C:/Program Files/Common Files/VST3/`. Close DAWs before updating. Installation is optional; normal builds do not write to system directories.
 
-Standalone uses JUCE's audio/MIDI settings dialog to select devices and buffer sizes. Default Windows audio is available without an ASIO SDK. Optional ASIO requires a separately obtained SDK and CMake `-DWEE_ENABLE_ASIO=ON -DWEE_ASIO_SDK_PATH=<sdk-root>`; review that SDK's license before distribution. This path is untested.
+The standalone's JUCE audio/MIDI settings dialog selects devices and buffers. Optional ASIO requires a separately obtained SDK and CMake `-DWEE_ENABLE_ASIO=ON -DWEE_ASIO_SDK_PATH=<sdk-root>`. Review its license before distribution; ASIO has not been tested here. Default Windows audio does not need that SDK. JUCE licensing is described in LICENSE.md.
 
-## Play
+## Play and edit layers
 
-Load WEE as an instrument, route MIDI to it, or click the onscreen keyboard. Sine, bandlimited saw, and bandlimited pulse are available. Six automatable controls cover output, ADSR, and tone cutoff. Pitch bend is ±2 semitones; CC64 sustains notes. MIDI channels share one instrument/voice pool. A / INIT resets parameters; B / PANIC stops all voices. Controls are keyboard focusable; JUCE's onscreen keyboard supports computer-keyboard playing when focused. Load/save uses `.wee` XML patches; three original synthesis patches are in `Content/Presets`. Host state recalls all seven parameters; external file references are not required in Phase 1.
+Enable layers with switches **1–8** above the display. Only layer 1 is enabled in an initialized patch. The LAYER menu and side **< LAYER / LAYER >** buttons choose which layer to edit; selection does not mute other layers. All enabled layers receive MIDI, limited by their own LOW/HIGH key range. Every layer has its own 32-voice pool (up to 256 rack voices), ADSR, level, stereo balance and transpose. **A / INIT** clears the shared sample and resets the whole patch; **B / PANIC** stops all voices. The onscreen keyboard plays notes; controls are keyboard focusable. Scroll the central panel to reach additional controls.
 
-The display reports last-block peak, active voices, host BPM (120 fallback), and estimated callback load. CPU measurement is indicative, not a complete host performance meter. Resizing is supported within 1000×720 to 1600×1152.
+- **SYNTH:** choose Sound source = Synth and select Virtual analog, Wavetable, FM or Granular. VA has sine/saw/pulse. Wavetable morphs across four original spectral frames (sine, triangle, saw and pulse), with pitch-appropriate harmonic levels and an optional second detuned oscillator. FM has carrier/modulator ratio and modulation index. The filter menu selects legacy low-pass or resonant low/high/band-pass. Engine-specific controls are disabled when inapplicable.
+- **SAMPLE / GRANULAR:** import WAV/AIFF/FLAC or drop a file onto the plugin. Loading enables the selected layer and selects sample playback, except when that layer is already in granular mode. All sample/granular layers share this single recording; each has separate root, trim and key mapping. Wait for the loading message to finish before playing or bouncing. Start/end are normalized 0–1; root uses MIDI numbers (60 by default). Sample LOOP repeats the trimmed region; granular mode instead creates Hann-windowed grains with position, size, density and spread. Root/trim/transpose are captured at note-on; grain controls affect newly spawned grains.
+- **MODULATION:** one free-running LFO per layer, with sine/triangle/square, Hz or tempo-linked beat divisions. Four routes connect LFO, last accepted velocity, mod wheel (CC1) or pressure to pitch, cutoff, WT position, amplitude, pan, FM index or grain position. Set source, destination and a signed depth; Off is neutral. Engine-specific destinations act only on their respective engines. Pressure is a global expression signal, not per-voice MPE.
+- **LAYER MIXER:** all eight levels and balances plus a smoothed global master level. Disabled layers can be edited before enabling them. Lower layer levels if stacked notes reach the output clamp.
 
-## FL Studio verification procedure — not yet performed
+The display reports host BPM (120 fallback), total/selected-layer voices, approximate callback CPU load and last-block peak. LFO tempo sync sets cycle speed; it does not align phase to host song position. Pitch bend is ±2 semitones; CC64 sustains notes. A source/engine change or layer disable stops that layer's current voices. Changes to transpose still release correctly using the original MIDI key.
 
-1. Build Release x64 and copy the VST3 bundle to the standard folder.
-2. Open **Options → Manage plugins**, enable verification, and **Find installed plugins**.
-3. Add WEE to the Channel Rack, play MIDI, and test velocities, sustain and pitch bend.
-4. Automate all parameters; save/reopen a project and compare settings and audio.
-5. Test 44.1/48/96 kHz and buffers 32–1024, multiple instances, resize, offline WAV bounce, and rapid preset switching.
-6. Run a VST3 validator/pluginval before calling a release validated.
+## Presets and samples
 
-If absent from scanning, confirm x64 Release and the complete `.vst3` directory, rescan failed plugins, and inspect the build/scan error. If silent, check MIDI routing, audio device, output gain and sustain settings. Crackles require profiling, not merely increasing the buffer. If JUCE download fails, supply `WEE_JUCE_PATH`; do not disable TLS verification. No Linux development packages or JUCE are bundled.
+LOAD/SAVE PATCH uses `.wee` XML files; host project state stores parameters and the shared sample path. New schema 3 preserves all 361 parameters. Phase 1 and Phase 2 presets migrate into layer 1 and disable added layers. Sample presets store a relative path for moved content folders plus an absolute fallback. Missing/corrupt samples are silent and show an error; LOAD SAMPLE / RELOCATE repairs the reference. Save the patch again afterward. Audio is external, not embedded in projects, so archive your recordings with your project.
 
-## Tests and architecture
+Factory patches include **Prism Pocket** (wavetable motion), **Dual Orbit** (three-layer WT/FM/VA), **Eightfold Nebula** (eight-layer pad) and **Grain Lantern** (granular + WT), plus the five earlier synth/sample patches. Two original CC0 synthetic stereo recordings are generated by `scripts/generate-demo.py` and verified against a provenance manifest. The build script/CI generate them automatically; no vocal collection is bundled. Keep `Content/Presets` and `Content/Samples` together.
 
-`Source/dsp/Engine.h` is independent of JUCE. Fixed voice storage, polyBLEP oscillators, envelope, one-pole filter, gain smoothing and soft output bounding require no dynamic allocation or locks. `PluginProcessor` maps sample-positioned MIDI, parameters, host tempo and versioned state. `Source/ui` handles presentation and file dialogs. `Source/dsp/Sampler.h` implements stereo resampling; `Source/sampling` contains the background decoder and a bounded pointer handoff with deferred asset destruction. GUI keyboard events use a bounded single-producer/single-consumer queue; disk operations stay on the message thread. The new sampler reads fully decoded RAM buffers; it does not stream from disk.
+## GitHub Actions download
 
-Portable test without JUCE or CMake:
+The Windows workflow runs on pushes to main, pull requests and manual dispatch. It builds Release, runs four CTest suites and verifies demo content. Successful runs upload **WEE-Windows-x64** for 14 days. Download that artifact, extract it, then extract the enclosed `WEE-Windows-x64.zip`. It contains `WEE.vst3`, `WEE.exe`, Content, documentation and licenses. A successful CI build is not FL Studio certification or a signed installer.
+
+## FL Studio checklist — requires local testing
+
+1. Install the complete x64 VST3 bundle in the standard directory.
+2. Open **Options → Manage plugins**, enable verification and **Find installed plugins**.
+3. Add WEE to the Channel Rack. Test all engines, eight-layer patches, velocity, sustain, bend, CC1 and pressure where the host supports it.
+4. Automate layer parameters, change editor pages/layers, save/reopen a project, and verify settings and sample paths.
+5. Test sample replacement while playing, missing-file relocation and an offline bounce after loading finishes.
+6. Try multiple instances, 44.1/48/96 kHz and buffers 32–1024. Run pluginval/VST3 validation before a release.
+
+If not found, check x64 Release and the entire `.vst3` folder, then rescan failed plugins. If silent, check enabled layers, key range, source/sample availability, output level, trim and modulation routes (an amplitude route can intentionally silence a layer). If a sample is missing, relocate it. Crackles require profiling; reduce layers/voices while diagnosing. If JUCE download fails, provide a local checkout; do not disable TLS verification.
+
+## Portable tests and limitations
+
+CMake core-only tests do not require JUCE:
 
 ```sh
-g++ -std=c++20 -O2 -I Source tests/DspTests.cpp -o /tmp/wee_dsp_tests
-/tmp/wee_dsp_tests
-g++ -std=c++20 -O2 -pthread -I Source tests/SamplerTests.cpp -o /tmp/wee_sampler_tests
-/tmp/wee_sampler_tests
+cmake -S . -B build/core -DWEE_CORE_ONLY=ON
+cmake --build build/core
+ctest --test-dir build/core --output-on-failure
 ```
 
-Or configure `cmake -S . -B build/core -DWEE_CORE_ONLY=ON`, build and run CTest. The full build adds state serialization/preset tests. See [status and next steps](docs/STATUS.md), [content format](docs/CONTENT.md), and [licensing](LICENSE.md).
+Without CMake, compile the three standalone tests with C++20 and `-I Source`; add `-pthread` for SamplerTests.cpp. Example: `g++ -std=c++20 -O2 -I Source tests/HybridTests.cpp -o /tmp/wee_hybrid_tests`. Full JUCE builds also run host/preset and decoder integration tests.
 
-## GitHub Actions builds
-
-The Windows VST3 and Standalone workflow runs on pushes to main, pull requests, or manually from the Actions tab. It builds Release x64, runs DSP, sampler, and preset/state tests, and uploads `WEE-Windows-x64` only after all steps pass. Open a successful run, download that artifact, then extract the inner ZIP. Install the entire `WEE.vst3` folder into the standard VST3 directory; `WEE.exe` is the standalone. The package includes the presets and documentation. Artifacts expire after 14 days. A successful build does not verify FL Studio playback or constitute a signed release.
-
-## Sample cartridge — Phase 2
-
-Choose **LOAD SAMPLE / RELOCATE** to browse WAV, AIFF or FLAC files, or drop a supported audio file on the plugin. Loading switches the sound source to SAMPLE. Wait until the loading message is replaced by the filename before playing or starting an offline bounce. Keyboard notes received while loading are ignored, not queued. Unsupported/missing samples become silent and display an error; use the same button to relocate a missing recording. Choose OSCILLATOR to return to the Phase 1 synth.
-
-The waveform shows the decoded audio peak envelope, with amber start/end markers. Set START and END in normalized 0–1 units, ROOT MIDI to the recording's original pitch (60 by default), and LOW/HIGH KEY to its keyboard range. ROOT, key range, trim and LOOP are captured on each note-on; replay notes after changes. The existing ADSR, velocity, pitch bend, sustain and tone filter work in sample mode. LOOP repeats the trimmed region during the held note and its envelope release. Invalid trim or reversed key ranges sound silent and cannot be loaded as a saved preset. Clear stops/unloads the sample; A / INIT also resets parameters.
-
-The two new factory presets, **Pocket Reed.wee** and **Glass Cartridge.wee**, use original synthetic audio generated by `scripts/generate-demo.py`. The PowerShell script and CI generate and verify these WAVs automatically. Keep `Content/Presets` and `Content/Samples` together. Samples remain external to the plugin; presets save a relative path for folder relocation and an absolute path as fallback. Host projects save the absolute path and parameters, not audio data. Archive your own sample files with your project. The three Phase 1 synthesis presets remain compatible through schema migration.
-
-Limits: one mapped sample per patch, 32 voices, mono/stereo input files, 8–192 kHz, at most 120 seconds and 128 MiB decoded per asset. Interpolation changes duration with pitch and can alias at large pitch shifts. No time stretching, multisample zones, streaming or automatic crossfade loops are claimed. Loop points must be chosen carefully; discontinuous loops and asset switches may click. See docs/STATUS.md for the remaining phases.
+This is an incremental instrument. Wavetables are built-in, FM is two-operator, granular uses four fixed heads per voice, and eight layers share one RAM sample asset. There is no multisample library manager, streaming, formant preservation, time stretching or complete vocal laboratory yet. Complex patches have not been profiled for real-time DAW CPU limits. See docs/STATUS.md and docs/CONTENT.md for exact boundaries and next steps.

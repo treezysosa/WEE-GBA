@@ -1,38 +1,39 @@
 # Implementation and verification
 
-## Phase 1
+## Prior verified milestones
 
-Windows x64 VST3 and standalone builds succeeded in GitHub Actions run 38850425598. The DSP and preset-state CTest suites both passed. Actual GUI operation, audio-device output, FL Studio playback and plugin validation were not performed by that run.
+Phase 1 Windows x64 VST3/standalone and two tests passed in Actions run 38850425598. Phase 2's stereo sampler, loader and sample-state integration passed all three tests in final run 38852200800. Neither run verified FL Studio/audio-device playback or human UI operation.
 
-## Phase 2 implementation
+## Phase 3 implementation
 
-- Fixed 32-voice stereo sampler: linear interpolation, MIDI root/key-range mapping, velocity, ADSR, sustain, ±2-semitone bend, oldest-voice stealing and panic.
-- Sample start/end, looping of the trimmed region, one-shot boundary fades, tone filtering, source selection and mono output fold-down.
-- Dedicated background WAV/AIFF/FLAC decoder with size/duration limits, nonfinite-data sanitization, waveform preview and readable loading/missing/corrupt-file errors.
-- Fixed-size pointer exchange: audio swaps prepared assets at block boundaries, kills old sample voices and retires the old buffer; worker performs all asset destruction. Pending replacements are coalesced; no shared_ptr destruction or locking in the audio handoff.
-- Native sample file browser, drag/drop audio or presets, onscreen-key audition, visible mapping/trim controls, clear/relocate and functional source switching. No decorative inactive tabs are exposed.
-- Schema-2 host state and presets, schema-1 migration, relative/fallback absolute sample paths, manual missing-file recovery and temporary-file saves.
-- Two original CC0 synthesized stereo demos with reproducible generation and a provenance manifest, alongside three original synthesis presets.
+- Eight independently enabled layers, each with 32 voices, ADSR, level/balance, transpose, key range and its own source/engine. Total cap: 256 layer voices. Engine changes/disable stop only that layer; note-off retains original MIDI identity after transpose changes.
+- Original four-frame wavetable bank (sine/triangle/saw/pulse), 1024 samples per frame, ten Fourier harmonic-limit levels. Tables/Hann windows are prepared before callbacks, with harmonic levels selected per voice/control chunk. Two detuned WT oscillators per voice with an adjustable blend.
+- Two-operator sine phase-modulation FM foundation with ratio and modulation index. This is not a full multi-operator FM workstation.
+- Four-head granular sample engine per voice: interpolated stereo reads, precomputed Hann windows, adjustable position/size/density/spread, deterministic per-voice PRNG, keyboard pitch/root and ADSR. Grains wrap within the trimmed span; four-head saturation drops extra spawn requests.
+- Per-layer legacy one-pole or resonant TPT state-variable low/high/band-pass filters. One sine/triangle/square LFO per layer, Hz or beat-cycle tempo sync.
+- Four modulation routes per layer. Sources: LFO, last note velocity, CC1, global pressure. Destinations: pitch, cutoff, WT position, amplitude, balance, FM index, grain position. MIDI channel/poly pressure are treated as one expression signal; this is not MPE/per-note expression.
+- Working Synth, Sample/Granular, Modulation and Layer Mixer pages, scrollable controls, eight enable switches, layer selector and previous/next buttons. Inapplicable engine controls disable. Master level smooths; summed output clamps at ±1.
+- Schema 3 stores 361 controls, shared sample references, and migrates schemas 1/2 to layer 1 with other layers disabled. Four original factory patches demonstrate WT motion, mixed engines, all eight layers and granular texture.
 
-## Verification
+## Validation and current gate
 
-Phase 2 portable sampler tests pass under GCC 14.2 and AddressSanitizer/UndefinedBehaviorSanitizer (leak detection disabled because this environment runs under ptrace). They cover 3 rates × 5 buffers, stereo independence, pitch/root/octave, looping, release/sustain, key ranges, trim, silence on missing asset, voice limits, 20,000 concurrent publications and audio-thread allocation/asset-destruction guards. Phase 1 DSP tests still pass. Content generation and provenance verification pass locally.
+Local portable tests cover VA/sample regressions plus 75 engine/rate/buffer combinations for the rack (5 sources × 3 sample rates × 5 block sizes). Additional checks cover WT tuning/harmonic limits, FM spectral changes, granular silence/stereo/determinism, 256-voice stealing, independent layer disable, pan, expression routing, original-key release after transpose edits, LFO speed/phase and filter DC response/stability. The test audio sections contain an allocation guard. The sampler exchange still passes the 20,000-publication lifetime stress test. Hybrid AddressSanitizer/UndefinedBehaviorSanitizer tests also passed, with leak detection disabled because this environment runs under ptrace. Windows integration is the remaining build gate.
 
-Windows CI run 38851631923 compiled the Phase 2 VST3 and standalone and passed all three CTest suites, including integration checks for asynchronous decode, sample state recall, schema migration, moved-folder recovery, missing/corrupt files, rapid replacement and mono AIFF/FLAC playback. The preset-save regression and additional velocity/bend tests were added afterward; consult this commit’s Actions checks for their result. FL Studio/other DAWs, human listening, standalone device configuration, ASIO and GUI interaction remain unverified even after CI passes.
+The Windows workflow must compile VST3/standalone and pass four CTest suites. Extended state tests cover schema 1/2/3 migrations, layer-8 recall, new factory patches, sample-positioned MIDI and two-byte pressure routing, in addition to Phase 2 decoding/relocation/corrupt-file checks. Consult the latest Phase 3 PR Actions result for actual outcome. FL Studio/other DAWs, physical audio, GUI interaction, pluginval, ASIO and hard real-time performance remain unverified even after CI passes.
 
-## Real-time behavior and limits
+## Real-time design and boundaries
 
-No sampler disk I/O, allocation, blocking locks or asset deletion occur in processBlock. Decoder requests/status and preset I/O use non-audio threads. A two-slot atomic pointer exchange bounds audio-side work; a loaded sample is immutable. GUI keys use a bounded SPSC queue; overflow requests panic. Short MIDI messages are read in-place. The JUCE wrapper/APVTS/host APIs still need whole-plugin profiling before a strict hard-real-time guarantee. Tests guard the portable engine and exchange, not every host/wrapper call.
+Voice/grain pools, tables, modulation arrays and 16-sample scratch buffers are fixed/prepared. processBlock snapshots atomic parameters once per callback; routes/filter coefficients update in chunks of at most 16 samples. Short MIDI is read in place, and GUI notes use a bounded SPSC queue. There is no sample I/O, buffer allocation/destruction or blocking loader lock in the callback. Wavetable preparation and all decoding/reclamation run outside playback. Tests guard portable engines; JUCE wrapper/APVTS/host APIs need complete profiling before a hard-real-time guarantee.
 
-A sample is fully resident in RAM, not disk-streamed; one asset is mapped across one key range per patch. Simultaneous current/pending/retired/decoding buffers can temporarily use several times the per-asset limit. Old voices stop on content change. Playback or an offline bounce should begin only after loading completes; MIDI notes during loading are discarded. Files are not embedded in host projects; collect them with your project. Controls for root, key range, trim and loop apply at note-on. Invalid trim/key ranges are silent. Channels share global bend/sustain; no MPE. Same-pitch note-off releases all matching held voices.
+Sample/granular layers share one recording; each has independent root/trim settings captured at note-on. Sample assets are RAM-resident and external to presets. Pending/current/retired/decoding assets can temporarily use several times the 128-MiB per-asset cap. Wait for loading before offline bounce; notes needing an unfinished asset are dropped. File replacement stops old sample/grain voices. Collect recordings with DAW projects.
 
-Loop boundaries have no automatic crossfade; choose matching edges. Asset switching, stealing, envelope edits and block-rate filter edits can click. Large sample pitch shifts can alias; no formant preservation or time stretching. Output soft clipping is not a mastering limiter. No streaming/SIMD/oversampling optimization is claimed. GUI is resizable and uses standard readable JUCE fonts; it has no complete seven-page product navigation yet.
+LFOs run freely and follow BPM for speed, without host-song phase alignment. Last-velocity and pressure routes are layer/global signals, not per-voice modulation. There is no modulation envelope matrix source yet; ADSR controls each voice's amplitude. Single sample interpolation and high-index FM can alias; wavetable harmonic-level transitions, source swaps, steals and abrupt edits can click. There is no oversampling or click-free topology crossfade. The final output clamp protects bounds but is not a mastering limiter. CPU at 256 complex voices is unprofiled; reduce layers/polyphony while evaluating. No GPU/SIMD optimization is claimed.
 
-## Next milestones
+## Next steps
 
-1. Verify the Phase 2 Windows build/tests, then run the documented FL Studio and pluginval checks with imported stereo and long samples. Test sample relocation, rapid replacement while holding notes, save/reopen, offline bounce, multiple instances and buffers 32–1024.
-2. Extend sampling to multiple key/velocity zones, round robin, release samples, crossfade loops and persistent user-library indexing; profile memory/loading before expanding the library.
-3. Phase 3: wavetable, multilayer architecture, filter/LFO/modulation matrix, FM and granular foundations with DSP tests.
-4. Later: vocal slicing/pitch/formant/time stretching, deterministic generation/export, complete effects/UI, profiling, signed installers and release validation.
+1. Confirm the Phase 3 Windows build/tests and run FL Studio/pluginval, automation, resize, all-engine listening, save/reopen and offline-bounce checks with multiple instances and buffers 32–1024.
+2. Improve modulation smoothing, mip-level transitions and measured CPU hotspots. Extend sample assets to per-layer/multisample zones, crossfade loops and searchable content indexing.
+3. Phase 4: transient/slice detection and editing, pitch/formant/time-stretch algorithms, chop sequencing and tempo synchronization, with tests and honest algorithm/latency limits.
+4. Later phases: deterministic loop generation/export, full effect rack/library/navigation, profiling and signed installer/release validation.
 
-Multisample mapping, reverse, time stretching, vocal processing, eight layers, generator/export, modulation matrix, MIDI learn, expression/aftertouch routing, full effects, undo/redo, A/B, favorites/search, installers and the large commercial sample collection remain unfinished.
+External WT import, higher-operator FM, full granular time stretching, separate sample files per layer, multisample/velocity zones, reverse/vocal processing, full effects, MIDI learn, undo/redo, A/B, favorites/indexing, generators/export, installers and the large vocal library remain unfinished.
